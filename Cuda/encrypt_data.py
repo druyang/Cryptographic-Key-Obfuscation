@@ -59,8 +59,10 @@ def generate_keypair():
 
     # Size of N must be size(P) + size(Q) + 1
 
-    upper_bound = 2**31 - 1  # upper bound for an int_32 holdint 32 bits
-    lower_bound = 2**30 - 1  # lower bound for an int_32 holding 31 bits
+    # upper_bound = 2**31 - 1  # upper bound for an int_32 holdint 32 bits
+    # lower_bound = 2**30 - 1  # lower bound for an int_32 holding 31 bits
+    upper_bound = 2**15 - 1  # upper bound for an int_32 holdint 32 bits
+    lower_bound = 2**14 - 1  # lower bound for an int_32 holding 31 bits
 
     # Generate Prime Values for p and q
     while(True):
@@ -122,9 +124,9 @@ if __name__ == '__main__':
     Detect if the script is being run directly by the user
     '''
     (e, n), (d, n) = generate_keypair()
-    print("e:", e)
-    print("d:", d)
-    print("n:", n)
+    print("const unsigned ll e = "+ str(e) + ";")
+    print("const unsigned ll d = "+ str(d) + ";")
+    print("const unsigned ll n = "+ str(n) + ";")
 
     # print("RSA Encrypter/ Decrypter")
     # print("Generating your public/private keypairs now . . .")
