@@ -1,7 +1,9 @@
 /**
  * Basic CPU and GPU statistics to add to our project
  *
- * Usage: ./statistics [filename] [gpu|cpu]
+ * Usage: ./statistics [datafile] [categoryfile] [gpu|cpu]
+ * where datafile is the data, and categoryfile is an equally long array of either 0 or 1
+ * which indicates which sample the data at the same index belongs to (for a t-test)
  */
 #include <iostream>
 #include <cstdio>
