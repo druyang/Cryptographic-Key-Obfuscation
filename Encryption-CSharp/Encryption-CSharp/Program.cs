@@ -9,6 +9,8 @@ using System.IO.Enumeration;
 using System.Linq;
 using System.Reflection.Metadata;
 using System.Security.Cryptography;
+using System.Threading.Tasks;
+using System.Threading;
 
 namespace Encryption_CSharp
 {
@@ -209,8 +211,8 @@ namespace Encryption_CSharp
             Encryption_Module helpers = new Encryption_Module(); 
             bool verbose = false;
             int num_cols = 8;
-            const int pad_bytes = 2; 
-
+            const int pad_bytes = 2;
+            var timer = new System.Diagnostics.Stopwatch(); 
 
             // Validate inputs 
             if (args.Length == 0)
@@ -232,7 +234,8 @@ namespace Encryption_CSharp
             UInt64[,] processed_data = process_korea_format(data);
             BinaryWriter file_writer = new BinaryWriter(File.Open(args[1], FileMode.Create));
 
-            // Loop over rows
+            timer.Start(); 
+            // Loop over rows of data 
             for (int i = 0; i <= processed_data.GetUpperBound(0); i++)
                 //for (int i = 0; i <= 1; i++)
             {
@@ -267,8 +270,8 @@ namespace Encryption_CSharp
 
                         // Pad 2 most significant bytes with random values 
                         RNGCryptoServiceProvider rng = new RNGCryptoServiceProvider();
-                        rng.GetBytes(byted_row, sizeof(UInt64) - pad_bytes + k * sizeof(UInt64), pad_bytes); 
-                  
+                        rng.GetBytes(byted_row, sizeof(UInt64) - pad_bytes + k * sizeof(UInt64), pad_bytes);
+
                         if (verbose)
                         {
                             //Console.WriteLine("After Rand:");
@@ -279,20 +282,25 @@ namespace Encryption_CSharp
                     }
 
                     //Encrypt Bytes: 
+                    //Parallel encryption (speeds up from 2.8 s -> 1.3s) 
+                    ParallelOptions po = new ParallelOptions();
+                    po.MaxDegreeOfParallelism = 8;
+
                     UInt64[] encrypted_values = new UInt64[num_cols];
-                    for (int current_cell = 0; current_cell < num_cols; current_cell++)
-                    {
-                        UInt64 c_value_int = BitConverter.ToUInt64(byted_row, sizeof(UInt64) * current_cell);
-                        encrypted_values[current_cell] = helpers.encryptCell(c_value_int);
-                        Buffer.BlockCopy(BitConverter.GetBytes(encrypted_values[current_cell]), 0, byted_row, current_cell * sizeof(UInt64), sizeof(UInt64));
-                        if (verbose)
-                        {
+                    //for (int current_cell = 0; current_cell < num_cols; current_cell++)
+                    Parallel.For(0, num_cols, po, (current_cell) =>
+                     {
+                         UInt64 c_value_int = BitConverter.ToUInt64(byted_row, sizeof(UInt64) * current_cell);
+                         encrypted_values[current_cell] = helpers.encryptCell(c_value_int);
+                         Buffer.BlockCopy(BitConverter.GetBytes(encrypted_values[current_cell]), 0, byted_row, current_cell * sizeof(UInt64), sizeof(UInt64));
+                         if (verbose)
+                         {
                             //Console.WriteLine("After Rand:");
                             ProcessBA(byted_row, current_cell * sizeof(UInt64));
 
-                        }
+                         }
 
-                    }
+                     }); 
 
                     // write row to file
 
@@ -301,13 +309,13 @@ namespace Encryption_CSharp
 
                 }
             }
-
+            timer.Stop(); 
+               
+            // Close data files 
             file_writer.Flush();
             file_writer.Close();
 
-
-            // Write CSV  
-
+            Console.WriteLine($"Execution Time: {timer.ElapsedMilliseconds} ms"); 
             return 0; 
         }
     }
