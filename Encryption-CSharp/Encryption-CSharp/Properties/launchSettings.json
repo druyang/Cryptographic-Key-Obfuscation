@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Encryption-CSharp": {
+      "commandName": "Project",
+      "commandLineArgs": "C:\\Users\\dru\\Documents\\GitHub\\parallel-data-analysis-obfuscation\\Data\\RAW_PatientInfo.csv C:\\Users\\dru\\Documents\\GitHub\\parallel-data-analysis-obfuscation\\Data\\test.dat"
+    }
+  }
+}
