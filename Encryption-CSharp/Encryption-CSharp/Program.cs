@@ -1,21 +1,20 @@
 ﻿using Microsoft.VisualBasic.FileIO;
 using System;
+using System.ComponentModel.Design;
+using System.Diagnostics;
+using System.Drawing;
+using System.Globalization;
+using System.IO;
 using System.IO.Enumeration;
 using System.Linq;
-
-namespace RSACryption
-{
-    public enum RSAKeySize
-    {
-        Key_64 = 64, 
-        Key_128 = 128
-    }
-}
+using System.Reflection.Metadata;
+using System.Security.Cryptography;
 
 namespace Encryption_CSharp
 {
     class Encryption_Module
     {
+
         public static int id_col = 0, 
                           gender_col = 2, 
                           age_col = 3 , 
@@ -59,10 +58,12 @@ namespace Encryption_CSharp
             return loaded_data; 
         }
 
-        private static Int64[,] process_korea_format(preProccessedData raw_CSV)
+
+
+        private static UInt32[,] process_korea_format(preProccessedData raw_CSV)
         {
 
-            Int64[,] processed_data = new Int64[raw_CSV.num_rows,8];
+            UInt32[,] processed_data = new UInt32[raw_CSV.num_rows,8];
             int processed_data_row = 0; 
 
             // Loop over all rows in raw_csv / preprocessed data 
@@ -76,7 +77,7 @@ namespace Encryption_CSharp
                 else
                 {
                     // Copy over patient ID
-                    processed_data[processed_data_row, 0] = Int64.Parse(raw_CSV.data[curr_row, id_col]);
+                    processed_data[processed_data_row, 0] = (UInt32) processed_data_row; 
 
                     // Copy over gender data 
                     if (raw_CSV.data[curr_row, gender_col] == "male")
@@ -100,7 +101,7 @@ namespace Encryption_CSharp
                     }
 
                     // Copy over age
-                    processed_data[processed_data_row, 4] = Int64.Parse(raw_CSV.data[curr_row, age_col]);
+                    processed_data[processed_data_row, 4] = UInt32.Parse(raw_CSV.data[curr_row, age_col]);
 
                     // Copy over status 
 
@@ -133,9 +134,31 @@ namespace Encryption_CSharp
             return processed_data; 
 
         }
+        const string formatter = "{0,5}{1,17}{2,15}";
+
+        // Convert four byte array elements to a uint and display it.
+        public static void ProcessBA(byte[] bytes, int index)
+        {
+
+
+            // Double check for UInt32 Values 
+
+
+                UInt32 value = BitConverter.ToUInt32(bytes, index);
+                Console.WriteLine(formatter, index, BitConverter.ToString(bytes, index, sizeof(UInt32)), value);
+            
+
+        }
+
+
+
 
         static int Main(string[] args)
         {
+            bool verbose = true;
+            int num_cols = 8;
+            const int pad_bytes = 2; 
+
 
             // Validate inputs 
             if (args.Length == 0)
@@ -154,14 +177,68 @@ namespace Encryption_CSharp
             preProccessedData data = CSV_Loader(input_csv);
 
             // Process Data 
-            Int64[,] processed_data = process_korea_format(data);
+            UInt32[,] processed_data = process_korea_format(data);
+            BinaryWriter file_writer = new BinaryWriter(File.Open(args[1], FileMode.Create));
 
-            Console.WriteLine(String.Join(" ", processed_data.Cast<Int64>()));
-            // Encrypt CSV Array 
+            // Loop over rows
+            //for (int i = 0; i <= processed_data.GetUpperBound(0); i++)
+            for (int i = 0; i <= 1; i++)
+            {
+                if (processed_data[i,0] != 0)
+                {
+                    // Print processed data 
+                    if (verbose)
+                    {
+                        for (int k = 0; k < num_cols; k++)
+                            Console.Write("{0} ", processed_data[i, k]);
+                        Console.WriteLine("");
+
+                    }
+
+                    // Store each row in bytes
+                    byte[] byted_row = new byte[8 * sizeof(UInt32)];
+                    for (int j = 0; j < 8; j++)
+                    {
+                        Buffer.BlockCopy(BitConverter.GetBytes(processed_data[i,j]), 0, byted_row, j*sizeof(UInt32), sizeof(UInt32));
+
+                    }
+
+                    // Randomize padded byte data 
+
+                        for (int k = 0; k < num_cols; k++)
+                        {
+                        if (verbose)
+                        {
+                            //Console.WriteLine("Before Rand:");
+                            ProcessBA(byted_row, k * sizeof(UInt32));
+
+                        }
+
+                        RNGCryptoServiceProvider rng = new RNGCryptoServiceProvider();
+                        rng.GetBytes(byted_row, pad_bytes + k * sizeof(UInt32), 2); 
+                  
+                            if (verbose)
+                            {
+                                //Console.WriteLine("After Rand:");
+                                ProcessBA(byted_row, k * sizeof(UInt32));
+
+                            }
+                    }
+                    // Encrypt Bytes: 
+                    var key_pair = new RSACryptoServiceProvider(128); 
+                    // write row to file
+
+                    file_writer.Write(byted_row);
 
 
+                }
+            }
 
-            // Write CSV Array 
+            file_writer.Flush();
+            file_writer.Close();
+
+
+            // Write CSV  
 
             return 0; 
         }
