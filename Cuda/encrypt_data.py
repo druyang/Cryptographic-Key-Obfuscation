@@ -1,5 +1,6 @@
 import random
 import sys
+import struct
 from gmpy2 import invert
 
 
@@ -128,11 +129,32 @@ if __name__ == '__main__':
     print("const unsigned ll d = "+ str(d) + ";")
     print("const unsigned ll n = "+ str(n) + ";")
 
-    # print("RSA Encrypter/ Decrypter")
-    # print("Generating your public/private keypairs now . . .")
-    # public, private = generate_keypair()
-    # print("Your public key is " + str(public) + " and your private key is "
-    #       + str(private))
+    print("RSA Encrypter/ Decrypter")
+    print("Generating your public/private keypairs now . . .")
+    public, private = generate_keypair()
+    print("Your public key is " + str(public) + " and your private key is "
+          + str(private))
+        
+    with open("input.dat", "rb") as file_in: 
+
+        # File to write to 
+        file_out = open("output.dat", "wb")
+
+        while True: 
+            # Read 4 bits in at a time
+            current_read = file_in.read(4)
+
+            if not current_read: 
+                break
+                # End of file, quit
+
+            current_int = struct.unpack('l', current_read)
+            encrypted_int = encrypt(private, current_int)
+            print(decrypt(public,encrypted_int))
+            file_out.write(struct.pack('l', encrypted_int))
+
+        file_out.close()
+
     # message = input("Enter a message to encrypt with your private key: ")
     # encrypted_msg = encrypt(private, message)
     # print("Your encrypted message is: ")
