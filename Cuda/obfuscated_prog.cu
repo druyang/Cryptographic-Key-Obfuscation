@@ -34,6 +34,8 @@ const unsigned int data_cols = 10;
 const unsigned ll e = 963443092119039113;
 const unsigned ll d = 920403722748280569;
 const unsigned ll n = 2108958572404460311;
+const int BLOCK_DIM = 8;
+
 
 void Statistics_CPU(unsigned ll *indep, unsigned ll *dep, int numcols);
 // void Statistics_GPU(unsigned ll *indep, unsigned ll *dep, int numcols);
@@ -241,13 +243,14 @@ unsigned ll* File_To_Array(const char *filename, int &length, int &fd)
     return (unsigned ll *)mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
 }
 
-__global__ void transposeCoalesced(const float *A, float *AT, const int numrows, const int numcols)
+__global__ void transposeCoalesced(const unsigned ll* A, unsigned ll* AT, const int numrows, const int numcols)
 {
-	__shared__ unsigned ll tile[blockDim.x][blockDim.x + 1]; // add plus one to avoid bank conflict
-	int j = blockIdx.x * blockDim.x+ threadIdx.x;
-	int i = blockIdx.y * blockDim.y + threadIdx.y;
+	__shared__ unsigned ll tile[BLOCK_DIM][BLOCK_DIM + 1]; // add plus one to avoid bank conflict
+	int j = blockIdx.x * BLOCK_DIM + threadIdx.x;
+	int i = blockIdx.y * BLOCK_DIM + threadIdx.y;
 
-	if(i <= numcols && j <= numrows) {
+	if(i <= numrows && j <= numcols) {
+
 		tile[threadIdx.y][threadIdx.x]=A[i*numcols+j];
 		__syncthreads();
 
@@ -255,8 +258,11 @@ __global__ void transposeCoalesced(const float *A, float *AT, const int numrows,
 		int tj=blockIdx.y*blockDim.x+threadIdx.x;	////x for column
 		int ti=blockIdx.x*blockDim.y+threadIdx.y;	////y for row
 		AT[ti*numrows+tj] = tile[threadIdx.x][threadIdx.y];
+	
 	}
 }
+
+
 
 
 // __host__ void Test_Decypt()
@@ -437,21 +443,21 @@ __host__ void Test_Entire_CPU(char *dataname)
 // 	const int numcols = 8;
 // 	int numrows = datalength / numcols;
 
-// 	// **** GPU TRANSPOSE **** //
-// 	unsigned ll* data_gpu;
-// 	cudaMalloc((void**)&data_gpu, numrows * numcols * sizeof(unsigned ll*));
-// 	cudaMemcpy(data_gpu, data, data_rows * data_cols * sizeof(unsigned ll),
-// 			cudaMemcpyHostToDevice);
+// **** GPU TRANSPOSE **** //
+// unsigned ll* data_gpu;
+// cudaMalloc((void**)&data_gpu, numrows * numcols * sizeof(unsigned ll));
+// cudaMemcpy(data_gpu, data, data_rows * data_cols * sizeof(unsigned ll),
+// 		cudaMemcpyHostToDevice);
 
-// 	unsigned ll *transpose_gpu; 
-// 	cudaMalloc((void**)&transpose_gpu, numrows * numcols * sizeof(unsigned ll*));
+// unsigned ll *transpose_gpu; 
+// cudaMalloc((void**)&transpose_gpu, numrows * numcols * sizeof(unsigned ll));
 
-// 	const int block_size = 8;
-// 	const int block_num_x = numcols / block_size; // will always be 1 since numcols = 1
-// 	const int block_num_y= numrows / block_size;
+// const int block_size = BLOCK_DIM;
+// const int block_num_x = numcols / block_size; // will always be 1 since numcols = 1
+// const int block_num_y= ceil((double) numrows / (double) block_size);
 
-// 	transposeCoalesced<<<dim3(block_num_x,block_num_y),dim3(block_size,block_size)>>>
-// 	(data_gpu, transpose_gpu, numrows, numcols);
+// transposeCoalesced<<<dim3(block_num_x,block_num_y),dim3(block_size,block_size)>>>
+// (data_gpu, transpose_gpu, numrows, numcols);
 
 
 
