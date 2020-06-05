@@ -25,7 +25,7 @@
 
 
 using namespace std;
-using namespace std::chrono; 
+using namespace std::chrono;
 
 #define ll long long
 
@@ -34,8 +34,10 @@ const unsigned int data_cols = 10;
 const unsigned ll e = 963443092119039113;
 const unsigned ll d = 920403722748280569;
 const unsigned ll n = 2108958572404460311;
-const int BLOCK_DIM = 8;
+const int TRANPOSE_BLOCK_DIM = 8;
 
+const int linewidth = 64 * 8;
+#define C(i,j) i*linewidth + j
 
 void Statistics_CPU(unsigned ll *indep, unsigned ll *dep, int numcols);
 // void Statistics_GPU(unsigned ll *indep, unsigned ll *dep, int numcols);
@@ -245,9 +247,9 @@ unsigned ll* File_To_Array(const char *filename, int &length, int &fd)
 
 __global__ void transposeCoalesced(const unsigned ll* A, unsigned ll* AT, const int numrows, const int numcols)
 {
-	__shared__ unsigned ll tile[BLOCK_DIM][BLOCK_DIM + 1]; // add plus one to avoid bank conflict
-	int j = blockIdx.x * BLOCK_DIM + threadIdx.x;
-	int i = blockIdx.y * BLOCK_DIM + threadIdx.y;
+	__shared__ unsigned ll tile[TRANPOSE_BLOCK_DIM][TRANSPOSE_BLOCK_DIM + 1]; // add plus one to avoid bank conflict
+	int j = blockIdx.x * TRANPOSE_BLOCK_DIM + threadIdx.x;
+	int i = blockIdx.y * TRANPOSE_BLOCK_DIM + threadIdx.y;
 
 	if(i <= numrows && j <= numcols) {
 
@@ -261,8 +263,6 @@ __global__ void transposeCoalesced(const unsigned ll* A, unsigned ll* AT, const 
 	
 	}
 }
-
-
 
 
 // __host__ void Test_Decypt()
@@ -363,14 +363,14 @@ __global__ void transposeCoalesced(const unsigned ll* A, unsigned ll* AT, const 
 	
 // }
 
+
+
 __host__ void Test_Entire_CPU(char *dataname)
 {
-
 	//////////////
 	// Test CPU //
 	//////////////
 
-	const int linewidth = 64 * 8;
 	int fd;
 	int datalength; // already changed to bytes/8
 	
@@ -382,20 +382,20 @@ __host__ void Test_Entire_CPU(char *dataname)
 	int numrows = datalength / numcols;
 
 	// **** CPU TRANSPOSE **** //
-	unsigned ll *transpose = new unsigned ll[numcols][numrows];
+	unsigned ll *transpose = new unsigned ll[datalength];
 	for (int i = 0; i < numcols; i++) {
 		for (int j = 0; j < numrows; j++) {
-			transpose[j][i] = data[i][j];
+			transpose[C(j,i)] = data[C(i,j)];
 		}
-	}
-
+    }
+    
 	// 0 = pid, 1 = male, 2 = female, 3 = other gender, 4 = age
 	// 5 = deceased, 6 = released, 7 = in progress
 	const int independent_col = 2; // female
 	const int dependent_col = 5; // rate of deceased
 	
-	unsigned ll *indep_cipher = &transpose[2][0];
-	unsigned ll *dep_cipher = &transpose[5][0];
+	unsigned ll *indep_cipher = &transpose[C(2,0)];
+	unsigned ll *dep_cipher = &transpose[C(5,0)];
     // TODO: FIX 2D vs. 1D Array 
 	
 	printf("\nCipher text from file:\n");
@@ -452,7 +452,7 @@ __host__ void Test_Entire_CPU(char *dataname)
 // unsigned ll *transpose_gpu; 
 // cudaMalloc((void**)&transpose_gpu, numrows * numcols * sizeof(unsigned ll));
 
-// const int block_size = BLOCK_DIM;
+// const int block_size = TRANPOSE_BLOCK_DIM;
 // const int block_num_x = numcols / block_size; // will always be 1 since numcols = 1
 // const int block_num_y= ceil((double) numrows / (double) block_size);
 
