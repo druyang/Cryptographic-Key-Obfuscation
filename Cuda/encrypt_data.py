@@ -2,7 +2,8 @@ import random
 import sys
 import struct
 from gmpy2 import invert
-
+import math
+import numpy as np
 
 def gcd(a, b):
     '''
@@ -119,46 +120,44 @@ def decrypt(pk, ciphertext):
     return ''.join(plain)
 
 
+def gen_matrix(pk, sidelen=16):
+    """
+    Compute two sidelen x sidelen matricies which can be multiplied in order to compute the private key.
+    After multiplying these matricies, the resultant matrix is reduced to a single value, and an adjustment
+    , or intercept value is added to the reduced sum to compute the private key.
+    """
+    
+    mean = int(math.sqrt(pk / (sidelen**4))) # mean of the standard random normal distribution
+    sd = mean // 3  # standard deviation of the random normal distribution
+    
+    # generates a sidelen x sidelen random normal matrix with values distributed around base_value
+    matrix1 = np.random.normal(mean, sd, (sidelen, sidelen)).astype(int)
+    matrix2 = np.random.normal(mean, sd, (sidelen, sidelen)).astype(int)    
+    result = (matrix1 * matrix2).sum()
+    adjustment = pk - result
+    print("result = {}, adjustment = {}, so PK = {}".format(result, adjustment, result + adjustment))
+    
+    return (matrix1, matrix2, adjustment)
+
+
+def write_key_computation_info(pk, fo, sidelen=16):
+
+    matrix1, matrix2, adjustment = gen_matrix(pk, sidelen)
+    print('Matrix sidelen:', sidelen, '\n', file=fo)
+    print('adjustment:',adjustment, '\n', file=fo)
+    print('Matrix 1:', matrix1.flatten().tolist(), '\n', file=fo)
+    print('Matrix 2:', matrix2.flatten().tolist(), '\n', file=fo)
+
+
 if __name__ == '__main__':
     '''
     Detect if the script is being run directly by the user
     '''
     keysize = int(sys.argv[1])
     (e, n), (d, n) = generate_keypair(keysize)
-    print("const unsigned ll e = "+ str(e) + ";")
-    print("const unsigned ll d = "+ str(d) + ";")
-    print("const unsigned ll n = "+ str(n) + ";")
-
-    print("RSA Encrypter/ Decrypter")
-    print("Generating your public/private keypairs now . . .")
-    public, private = generate_keypair()
-    print("Your public key is " + str(public) + " and your private key is "
-          + str(private))
-        
-    with open("input.dat", "rb") as file_in: 
-
-        # File to write to 
-        file_out = open("output.dat", "wb")
-
-        while True: 
-            # Read 4 bits in at a time
-            current_read = file_in.read(4)
-
-            if not current_read: 
-                break
-                # End of file, quit
-
-            current_int = struct.unpack('l', current_read)
-            encrypted_int = encrypt(private, current_int)
-            print(decrypt(public,encrypted_int))
-            file_out.write(struct.pack('l', encrypted_int))
-
-        file_out.close()
-
-    # message = input("Enter a message to encrypt with your private key: ")
-    # encrypted_msg = encrypt(private, message)
-    # print("Your encrypted message is: ")
-    # print(''.join(map(lambda x: str(x), encrypted_msg)))
-    # print("Decrypting message with public key " + public + " . . .")
-    # print("Your message is:")
-    # print(decrypt(public, encrypted_msg))
+    fo = open('key.txt', 'w') 
+    print("const unsigned ll e = "+ str(e) + ";\n", file=fo)
+    print("const unsigned ll d = "+ str(d) + ";\n", file=fo)
+    print("const unsigned ll n = "+ str(n) + ";\n", file=fo)
+    write_key_computation_info(d, fo)
+    fo.close()
