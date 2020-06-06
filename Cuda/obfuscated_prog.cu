@@ -507,12 +507,12 @@ __host__ void Test_Entire_GPU(char *dataname)
 
     unsigned ll *indep_data_gpu;
     unsigned ll *dep_data_gpu;
-    // cudaMalloc((void**)&indep_data_gpu, numrows * sizeof(ll));
-    // cudaMalloc((void**)&dep_data_gpu, numrows * sizeof(ll));
-    // thrust::device_vector<unsigned ll> indep_data_thrust(numrows);
-    // thrust::device_vector<unsigned ll> dep_data_thrust(numrows);
-    // indep_data_gpu = thrust::raw_pointer_cast(indep_data_thrust.data());
-    // dep_data_gpu = thrust::raw_pointer_cast(dep_data_thrust.data()); 
+    cudaMalloc((void**)&indep_data_gpu, numrows * sizeof(ll));
+    cudaMalloc((void**)&dep_data_gpu, numrows * sizeof(ll));
+    thrust::device_vector<unsigned ll> indep_data_thrust(numrows);
+    thrust::device_vector<unsigned ll> dep_data_thrust(numrows);
+    indep_data_gpu = thrust::raw_pointer_cast(indep_data_thrust.data());
+    dep_data_gpu = thrust::raw_pointer_cast(dep_data_thrust.data()); 
 
 	cudaEvent_t start,end;
 	cudaEventCreate(&start);
