@@ -15,17 +15,18 @@
 
 #include <boost/math/distributions/students_t.hpp>
 
-// #include <thrust/device_vector.h>
-// #include <thrust/reduce.h>
-// #include <thrust/transform.h>
-// #include <thrust/transform_reduce.h>
-// #include <thrust/functional.h>
-// #include <thrust/count.h>
-// #include <thrust/execution_policy.h>
+#include <thrust/device_vector.h>
+#include <thrust/reduce.h>
+#include <thrust/transform.h>
+#include <thrust/transform_reduce.h>
+#include <thrust/functional.h>
+#include <thrust/count.h>
+#include <thrust/execution_policy.h>
 
 
 using namespace std;
 using namespace std::chrono;
+using boost::math::students_t;
 
 #define ll long long
 
@@ -34,25 +35,28 @@ const unsigned int data_cols = 10;
 const unsigned ll e = 963443092119039113;
 const unsigned ll d = 920403722748280569;
 const unsigned ll n = 2108958572404460311;
-const int TRANPOSE_BLOCK_DIM = 8;
+const int TRANSPOSE_BLOCK_DIM = 8;
 
 const int linewidth = 64 * 8;
 #define C(i,j) i*linewidth + j
 
 void Statistics_CPU(unsigned ll *indep, unsigned ll *dep, int numcols);
-// void Statistics_GPU(unsigned ll *indep, unsigned ll *dep, int numcols);
+void Statistics_GPU(thrust::device_vector<unsigned ll> indep, thrust::device_vector<unsigned ll> dep, int numcols);
 
-void CPU_One_Sample_T_Interval(int32_t *dep, int numcols);
-void CPU_Two_Sample_T_Test(int32_t *dep, int32_t *indep, int numcols);
+void CPU_One_Sample_T_Interval(unsigned ll *data, int numcols);
+void CPU_Two_Sample_T_Test(unsigned ll *data, unsigned ll *categories, int numcols);
 
-// void GPU_One_Sample_T_Interval(thrust::device_vector<int> data, int numcols);
-// void GPU_Two_Sample_T_Test(thrust::device_vector<int> data, thrust::device_vector<int> categories, int numcols);
+void GPU_One_Sample_T_Interval(thrust::device_vector<unsigned ll> data, int numcols);
+void GPU_Two_Sample_T_Test(thrust::device_vector<unsigned ll> data, thrust::device_vector<unsigned ll> categories, int numcols);
 
 
 __host__ void print_1D(unsigned ll* data, int length) {
-	for (int i = 0; i < min(length, 20); i++) {
-		std::cout << data[i] << ' ';
-	}
+	// for (int i = 0; i < min(length, 20); i++) {
+	// 	std::cout << data[i] << ' ';
+    // }
+    for (int i = length-20; i < length; i++) {
+        std::cout << data[i] << ' ';
+    }
 	std::cout << std::endl;
 }
 
@@ -204,17 +208,34 @@ __device__ unsigned ll modexp_dev(unsigned ll msg, unsigned ll exponent, unsigne
 }
 
 
-__global__ void gpu_decrypt(unsigned ll* cipher, unsigned ll* data)
+__global__ void gpu_decrypt(unsigned ll* cipher, unsigned ll* data, int numcols)
 {
 
-	int rows_per_block = blockDim.y;
-	int global_row = blockIdx.x * rows_per_block + threadIdx.y;
-	int local_row = threadIdx.y; 
-	int col = threadIdx.x;
+	// int rows_per_block = blockDim.y;
+	// int global_row = blockIdx.x * rows_per_block + threadIdx.y;
+	// int local_row = threadIdx.y; 
+	// int col = threadIdx.x;
+
+	// // If thread is in the bounds of the data array
+	// if (global_row < numrows && col < numcols) {
+
+    //     // decrypt and depad
+    //     data[global_row * data_cols + col] = modexp_dev(cipher[global_row * data_cols + col], d, n) & 0x00000000ffffffff;
+        
+    //     // Depad the data:
+    //     //data[i] &= 0x00000000ffffffff;
+    // }
+
+	int col = blockIdx.x * blockDim.x + threadIdx.x;
 
 	// If thread is in the bounds of the data array
-	if (global_row < data_rows && col < data_cols) {
-		data[global_row * data_cols + col] = modexp_dev(cipher[global_row * data_cols + col], d, n);
+	if (col < numcols) {
+
+        // decrypt and depad
+        data[col] = modexp_dev(cipher[col], d, n) & 0x00000000ffffffff;
+        
+        // Depad the data:
+        //data[i] &= 0x00000000ffffffff;
 	}
 }
 
@@ -234,7 +255,7 @@ unsigned ll* File_To_Array(const char *filename, int &length, int &fd)
     }
 
     // get length of the file in int32_t
-    length = sb.st_size / 4;
+    length = sb.st_size / 8;
 
     // mmap asks the OS to provision a chunk of disk storage out to contiguous (read aligned, coalesced) RAM
     // this is the reverse of using 'swap space' to cache some RAM out to disk when under memory pressure
@@ -247,9 +268,9 @@ unsigned ll* File_To_Array(const char *filename, int &length, int &fd)
 
 __global__ void transposeCoalesced(const unsigned ll* A, unsigned ll* AT, const int numrows, const int numcols)
 {
-	__shared__ unsigned ll tile[TRANPOSE_BLOCK_DIM][TRANSPOSE_BLOCK_DIM + 1]; // add plus one to avoid bank conflict
-	int j = blockIdx.x * TRANPOSE_BLOCK_DIM + threadIdx.x;
-	int i = blockIdx.y * TRANPOSE_BLOCK_DIM + threadIdx.y;
+	__shared__ unsigned ll tile[TRANSPOSE_BLOCK_DIM][TRANSPOSE_BLOCK_DIM + 1]; // add plus one to avoid bank conflict
+	int j = blockIdx.x * TRANSPOSE_BLOCK_DIM + threadIdx.x;
+	int i = blockIdx.y * TRANSPOSE_BLOCK_DIM + threadIdx.y;
 
 	if(i <= numrows && j <= numcols) {
 
@@ -375,17 +396,22 @@ __host__ void Test_Entire_CPU(char *dataname)
 	int datalength; // already changed to bytes/8
 	
 	// we need to pass in dataname as the filename into this
-	unsigned ll *data = File_To_Array(dataname, datalength, fd);
+    unsigned ll *cipher = File_To_Array(dataname, datalength, fd);
+    
 
 	// calculate matrix size
 	const int numcols = 8;
-	int numrows = datalength / numcols;
+    int numrows = datalength / numcols;
+    
+    printf("Datalength:%d\n", datalength);
+    printf("Cols:%d\n", numcols);
+    printf("Rows:%d\n", numrows); // should be 
 
 	// **** CPU TRANSPOSE **** //
 	unsigned ll *transpose = new unsigned ll[datalength];
-	for (int i = 0; i < numcols; i++) {
-		for (int j = 0; j < numrows; j++) {
-			transpose[C(j,i)] = data[C(i,j)];
+	for (int i = 0; i < numrows; i++) {
+		for (int j = 0; j < numcols; j++) {
+			transpose[j * numrows + i] = cipher[i * numcols + j];
 		}
     }
     
@@ -394,15 +420,14 @@ __host__ void Test_Entire_CPU(char *dataname)
 	const int independent_col = 2; // female
 	const int dependent_col = 5; // rate of deceased
 	
-	unsigned ll *indep_cipher = &transpose[C(2,0)];
-	unsigned ll *dep_cipher = &transpose[C(5,0)];
-    // TODO: FIX 2D vs. 1D Array 
+	unsigned ll *indep_cipher = &transpose[independent_col*numrows];
+	unsigned ll *dep_cipher = &transpose[dependent_col*numrows];
 	
 	printf("\nCipher text from file:\n");
-	print_1D(indep_cipher);
-	print_1D(dep_cipher);
+	print_1D(indep_cipher, numrows);
+	print_1D(dep_cipher, numrows);
 	
-	// Decrypt CPU
+    // Decrypt CPU:
 	auto start_time = high_resolution_clock::now();
 	
 	unsigned ll *indep_decoded = new unsigned ll[numrows];
@@ -410,9 +435,23 @@ __host__ void Test_Entire_CPU(char *dataname)
 	
 	cpu_decrypt(indep_cipher, indep_decoded, numrows);
 	cpu_decrypt(dep_cipher, dep_decoded, numrows);
-	printf("\nData after decryption on CPU \n");
-	print_1D(indep_decoded);
-	print_1D(dep_decoded);
+    printf("\nData after decryption on CPU \n");
+    
+	print_1D(indep_decoded, numrows);
+    print_1D(dep_decoded, numrows);
+
+    printf("\nData after depadding on CPU \n");
+
+    for (int i = 0; i < numrows; i++) {
+        indep_decoded[i] &= 0x00000000ffffffff; //0x0000ffffffffffff
+        dep_decoded[i] &= 0x00000000ffffffff;
+        // printf("\n%ld\n", 0x0000ffffffffffff);
+    }
+
+    print_1D(indep_decoded, numrows);
+    print_1D(dep_decoded, numrows);
+    
+    
     auto stop_time = high_resolution_clock::now();
 	auto duration = duration_cast<microseconds>(stop_time - start_time);
 
@@ -422,99 +461,117 @@ __host__ void Test_Entire_CPU(char *dataname)
 	// this assumes we transpose. if we don't, we need different parameters
 	Statistics_CPU(indep_decoded, dep_decoded, numrows);
 
-	munmap(data, datalength);
+	munmap(cipher, datalength);
 	close(fd);
 }
 
-// __host__ void Test_Entire_GPU(char *dataname)
-// {
-// 	//////////////
-// 	// Test GPU //
-// 	//////////////
+__host__ void Test_Entire_GPU(char *dataname)
+{
+	//////////////
+	// Test GPU //
+	//////////////
 
-// 	const int linewidth = 64 * 8;
-// 	int fd;
-// 	int datalength; // already changed to bytes/8
+	const int linewidth = 64 * 8;
+	int fd;
+	int datalength; // already changed to bytes/8
 
-// 	// we need to pass in dataname as the filename into this
-// 	unsigned ll *data = File_To_Array(dataname, datalength, fd);
+	// we need to pass in dataname as the filename into this
+	unsigned ll *cipher = File_To_Array(dataname, datalength, fd);
 
-// 	// calculate matrix size
-// 	const int numcols = 8;
-// 	int numrows = datalength / numcols;
-
-// **** GPU TRANSPOSE **** //
-// unsigned ll* data_gpu;
-// cudaMalloc((void**)&data_gpu, numrows * numcols * sizeof(unsigned ll));
-// cudaMemcpy(data_gpu, data, data_rows * data_cols * sizeof(unsigned ll),
-// 		cudaMemcpyHostToDevice);
-
-// unsigned ll *transpose_gpu; 
-// cudaMalloc((void**)&transpose_gpu, numrows * numcols * sizeof(unsigned ll));
-
-// const int block_size = TRANPOSE_BLOCK_DIM;
-// const int block_num_x = numcols / block_size; // will always be 1 since numcols = 1
-// const int block_num_y= ceil((double) numrows / (double) block_size);
-
-// transposeCoalesced<<<dim3(block_num_x,block_num_y),dim3(block_size,block_size)>>>
-// (data_gpu, transpose_gpu, numrows, numcols);
+	// calculate matrix size
+	const int numcols = 8;
+    int numrows = datalength / numcols;
+	const int independent_col = 2; // female
+	const int dependent_col = 5; // rate of deceased
 
 
+    // **** GPU TRANSPOSE **** //
+    unsigned ll* cipher_gpu;
+    cudaMalloc((void**)&cipher_gpu, numrows * numcols * sizeof(unsigned ll));
+    cudaMemcpy(cipher_gpu, cipher, numrows * data_cols * sizeof(unsigned ll),
+    	    cudaMemcpyHostToDevice);
 
-// 	// BELOW CODE UNDONE
+    unsigned ll *cipher_transpose_gpu; 
+    cudaMalloc((void**)&cipher_transpose_gpu, numrows * numcols * sizeof(unsigned ll));
+
+    const int block_size = TRANSPOSE_BLOCK_DIM;
+    const int block_num_x = numcols / block_size; // will always be 1 since numcols = 1
+    const int block_num_y= ceil((double) numrows / (double) block_size);
+
+    transposeCoalesced<<<dim3(block_num_x,block_num_y),dim3(block_size,block_size)>>>
+    (cipher_gpu, cipher_transpose_gpu, numrows, numcols);
+
+    // Get columns that we will be operating on;
+	unsigned ll *indep_cipher_gpu = &cipher_transpose_gpu[independent_col*numrows];
+    unsigned ll *dep_cipher_gpu = &cipher_transpose_gpu[dependent_col*numrows];
+
+    unsigned ll *indep_data_gpu;
+    unsigned ll *dep_data_gpu;
+    // cudaMalloc((void**)&indep_data_gpu, numrows * sizeof(ll));
+    // cudaMalloc((void**)&dep_data_gpu, numrows * sizeof(ll));
+    thrust::device_vector<unsigned ll> indep_data_thrust(numrows);
+    thrust::device_vector<unsigned ll> dep_data_thrust(numrows);
+    indep_data_gpu = thrust::raw_pointer_cast(indep_data_thrust.data());
+    dep_data_gpu = thrust::raw_pointer_cast(dep_data_thrust.data()); 
+
+	cudaEvent_t start,end;
+	cudaEventCreate(&start);
+	cudaEventCreate(&end);
+	float gpu_time=0.0f;
+	cudaDeviceSynchronize();
+    cudaEventRecord(start);
+    
+	// Set # of threads and blocks:
+	int blockdim = 256;
+	int num_blocks = ceil((double) numrows / (double) blockdim); // operate on one col at a time
 
 
-// 	// Reset data_host to zero before passing to GPU:
-// 	memset(data_host, 0x00, data_rows * data_cols * sizeof(ll));
+	// TODO: this needs to change to do 2 calls for indep and dep ciphers
+    gpu_decrypt<<<num_blocks, blockdim>>>(indep_cipher_gpu, indep_data_gpu, numrows);
+    gpu_decrypt<<<num_blocks, blockdim>>>(dep_cipher_gpu, dep_data_gpu, numrows);
 
-// 	// Copy cipher and blank data matrix to GPU;
-// 	ll* cipher_gpu;
-// 	ll* data_gpu;
+	cudaEventRecord(end);
+	cudaEventSynchronize(end);
+	cudaEventElapsedTime(&gpu_time,start,end);
+	cudaEventDestroy(start);
+	cudaEventDestroy(end);
 
-// 	cudaMalloc((void**)&cipher_gpu, data_rows * data_cols * sizeof(ll*));
-// 	cudaMemcpy(cipher_gpu, cipher_host, data_rows * data_cols * sizeof(ll),
-// 			cudaMemcpyHostToDevice);
+    // TODO: change this to both c
+    unsigned ll *dep_cipher_host = new unsigned ll[numrows]; 
+    unsigned ll *indep_cipher_host = new unsigned ll[numrows]; 
+	cudaMemcpy(dep_cipher_gpu, dep_cipher_host, numrows * sizeof(ll),
+            cudaMemcpyDeviceToHost);
+    cudaMemcpy(indep_cipher_gpu, indep_cipher_host, numrows * sizeof(ll),
+            cudaMemcpyDeviceToHost);
 
-// 	cudaMalloc((void**)&data_gpu, data_rows * data_cols * sizeof(ll*));
-// 	cudaMemcpy(data_gpu, data_host, data_rows * data_cols * sizeof(ll),
-// 			cudaMemcpyHostToDevice);
+    unsigned ll *dep_data_host = new unsigned ll[numrows]; 
+    unsigned ll *indep_data_host = new unsigned ll[numrows]; 
+    cudaMemcpy(dep_data_gpu, dep_data_host, numrows * sizeof(ll),
+            cudaMemcpyDeviceToHost);
+    cudaMemcpy(indep_data_gpu, indep_data_host, numrows * sizeof(ll),
+            cudaMemcpyDeviceToHost);
+            
+    printf("Datalength:%d\n", datalength);
+    printf("Cols:%d\n", numcols);
+    printf("Rows:%d\n", numrows); 
 
-// 	// Set # of threads and blocks:
-// 	int blockdim_x = data_cols;  // columns
-// 	int blockdim_y = 128 / data_cols;  // rows
-// 	int num_blocks = ceil((double) data_rows / (double) blockdim_y);
+    printf("\nCipher text:\n");
+    print_1D(indep_cipher_host, numrows);
+    print_1D(dep_cipher_host, numrows);
 
+	printf("\nData after decryption and depadding on GPU\n");
+    print_1D(indep_data_host, numrows);
+    print_1D(dep_data_host, numrows);
 
-// 	cudaEvent_t start,end;
-// 	cudaEventCreate(&start);
-// 	cudaEventCreate(&end);
-// 	float gpu_time=0.0f;
-// 	cudaDeviceSynchronize();
-// 	cudaEventRecord(start);
+	printf("\nGPU runtime: %.4f ms\n", gpu_time);
 
-// 	// TODO: Call Kernel to Decrypt Data:
-// 	gpu_decrypt<<<num_blocks, dim3(blockdim_x, blockdim_y)>>>(cipher_gpu, data_gpu);
+	// printf("\nSpeedup: %.4f X\n", (float)(duration.count()) / gpu_time);
 
+    // Statistics_GPU(indep_data_thrust, dep_data_thrust, numcols);
 
-// 	cudaEventRecord(end);
-// 	cudaEventSynchronize(end);
-// 	cudaEventElapsedTime(&gpu_time,start,end);
-// 	cudaEventDestroy(start);
-// 	cudaEventDestroy(end);
-
-// 	cudaMemcpy(data_host, data_gpu, data_rows * data_cols * sizeof(ll),
-// 			cudaMemcpyDeviceToHost);
-
-// 	printf("\nData after decryption on GPU\n");
-// 	print_data(data_host);
-
-// 	printf("\nGPU runtime: %.4f ms\n", gpu_time);
-
-// 	printf("\nSpeedup: %.4f X\n", (float)(duration.count()) / gpu_time);
-
-// 	munmap(data, datalength);
-// 	close(fd);
-// }
+	munmap(cipher, datalength);
+	close(fd);
+}
 
 void Statistics_CPU(unsigned ll *indep, unsigned ll *dep, int numcols)
 {
@@ -569,7 +626,7 @@ void CPU_One_Sample_T_Interval(unsigned ll *data, int numcols)
     std::cout<<"Sample size: \t\t"<<numcols<<"\n";
     std::cout<<"Sample mean: \t\t"<<mean<<"\n";
     std::cout<<"Sample std dev: \t"<<stddev<<"\n";
-    std::cout<<"Standard error: \t"<<stderror<"\n";
+    std::cout<<"Standard error: \t"<<stderror<<"\n";
     std::cout<<"\nT-statistic for 95 percent confidence interval: \t"<<t_statistic<<"\n";
     std::cout<<"Margin of error for this sample: \t\t"<<moe<<"\n";
     std::cout<<"95 percent confident that the true population mean lies between "<<mean-moe<<" and "<<mean+moe<<"\n";
@@ -658,7 +715,7 @@ void CPU_Two_Sample_T_Test(unsigned ll *data, unsigned ll *categories, int numco
     std::cout<<"Sample std dev[1]: \t"<<stddev[1]<<"\n\n";
     std::cout<<"Difference of means: \t\t"<<diffmeans<<"\n";
     std::cout<<"Degrees of freedom: \t\t"<<df<<"\n";
-    std::cout<<"Standard error of difference: \t"<<stderror<"\n";
+    std::cout<<"Standard error of difference: \t"<<stderror<<"\n";
     std::cout<<"\nT-statistic for difference of means compared to null hypothesis: "<<t_statistic<<"\n";
     std::cout<<"Alpha value: \t\t"<<alpha<<"\n";
     std::cout<<"P-value: \t\t"<<p_value<<"\n";
@@ -667,11 +724,179 @@ void CPU_Two_Sample_T_Test(unsigned ll *data, unsigned ll *categories, int numco
     std::cout<<"CPU runtime: "<<cpu_time.count()*1000.<<" ms."<<std::endl;
 }
 
+struct std_dev_func
+{
+	double mean = 0.0;
+	std_dev_func(double _a) : mean(_a) {}
+
+	__host__ __device__ double operator()(const int& val) const
+	{
+		return (val-mean) * (val-mean);
+	}
+};
+
+void Statistics_GPU(thrust::device_vector<unsigned ll> indep, thrust::device_vector<unsigned ll> dep, int numcols)
+{
+    GPU_One_Sample_T_Interval(dep, numcols);
+
+    GPU_Two_Sample_T_Test(dep, indep, numcols);
+}
+
+void GPU_One_Sample_T_Interval(thrust::device_vector<unsigned ll> data, int datalength)
+{
+    const double confidence = 0.95;
+    
+    cudaEvent_t start,end;
+    cudaEventCreate(&start);
+    cudaEventCreate(&end);
+    float gpu_time=0.0f;
+    cudaDeviceSynchronize();
+    cudaEventRecord(start);
+
+    // calculate mean with simple reduction
+    double mean = thrust::reduce(data.begin(), data.end(), (double)0, thrust::plus<double>());
+    mean /= datalength;
+
+    // calculate standard deviation with fused transform-reduce using std_dev_func functor
+    double stddev = thrust::transform_reduce(data.begin(), data.end(), std_dev_func(mean), (double)0, thrust::plus<double>());
+    stddev = sqrt(stddev/(datalength-1));
+
+    cudaEventRecord(end);
+    cudaEventSynchronize(end);
+    cudaEventElapsedTime(&gpu_time,start,end);
+    cudaEventDestroy(start);
+    cudaEventDestroy(end);
+
+    // standard error
+    double stderror = stddev / sqrt(datalength);
+
+    // calculate t-statistic
+    students_t dist(datalength - 1);
+    double t_statistic = quantile(dist, confidence/2+0.5);
+
+    // calculate margin of error
+    double moe = t_statistic * stderror;
+
+    std::cout<<"\nOne-Sample T-Interval GPU results: \n";
+    std::cout<<"Sample size: \t\t"<<datalength<<"\n";
+    std::cout<<"Sample mean: \t\t"<<mean<<"\n";
+    std::cout<<"Sample std dev: \t"<<stddev<<"\n";
+    std::cout<<"Standard error: \t"<<stderror<<"\n";
+    std::cout<<"\nT-statistic for 95 percent confidence interval: \t"<<t_statistic<<"\n";
+    std::cout<<"Margin of error for this sample: \t\t"<<moe<<"\n";
+    std::cout<<"95 percent confident that the true population mean lies between "<<mean-moe<<" and "<<mean+moe<<"\n";
+
+    printf("\nGPU runtime: %.4f ms\n",gpu_time);
+}
+
+void GPU_Two_Sample_T_Test(thrust::device_vector<unsigned ll> data, thrust::device_vector<unsigned ll> categories, int datalength)
+{
+    // level for statistical significance
+    const double alpha = 0.05;
+
+    cudaEvent_t start,end;
+    cudaEventCreate(&start);
+    cudaEventCreate(&end);
+    float gpu_time=0.0f;
+    cudaDeviceSynchronize();
+    cudaEventRecord(start);
+
+    // create two CUDA streams
+    cudaStream_t s1, s2;
+    cudaStreamCreate(&s1);
+    cudaStreamCreate(&s2);
+
+    double mean[2] = { 0, 0 };
+    int length[2] = { 0, 0 };
+    // int blank[2]; //dummy array
+
+    // key-sort the two vectors such that we have separated categories
+    thrust::sort_by_key(categories.begin(), categories.end(), data.begin());
+    // calculate the length of each section
+    length[0] = thrust::count(categories.begin(), categories.end(), 0);
+    length[1] = datalength - length[0];
+
+    // calculate both means
+    mean[0] = thrust::reduce(thrust::cuda::par.on(s1), data.begin(), data.begin() + length[0], (double)0, thrust::plus<double>());
+    mean[1] = thrust::reduce(thrust::cuda::par.on(s2), data.begin() + length[0], data.end(), (double)0, thrust::plus<double>());
+    // thrust::pair<int*,double*> new_end;
+    // thrust::equal_to<int> binary_pred;
+    // int* categories_raw = thrust::raw_pointer_cast(categories.data());
+    // double* data_raw = (double *)thrust::raw_pointer_cast(data.data());
+    // new_end = thrust::reduce_by_key(categories_raw, categories_raw + datalength, data_raw, blank, mean, binary_pred);
+    mean[0] /= length[0];
+    mean[1] /= length[1];
+
+    double stddev[2] = { 0, 0 };
+    double variance[2] = { 0, 0 };
+    // calculate both standard deviations and variances w/ transform-reduce and std_dev_func
+    variance[0] = thrust::transform_reduce(thrust::cuda::par.on(s1), data.begin(), data.begin() + length[0], std_dev_func(mean[0]), (double)0, thrust::plus<double>());
+    variance[1] = thrust::transform_reduce(thrust::cuda::par.on(s2), data.begin() + length[0], data.end(), std_dev_func(mean[1]), (double)0, thrust::plus<double>());
+    variance[0] /= (length[0] - 1);
+    variance[1] /= (length[1] - 1);
+    stddev[0] = sqrt(variance[0]);
+    stddev[1] = sqrt(variance[1]);
+
+    cudaEventRecord(end);
+    cudaEventSynchronize(end);
+    cudaEventElapsedTime(&gpu_time,start,end);
+    cudaEventDestroy(start);
+    cudaEventDestroy(end);
+
+    cudaDeviceSynchronize();
+    // destroy streams
+    cudaStreamDestroy(s1);
+    cudaStreamDestroy(s2);
+
+    // use welch's t-test for more sophistication under different variances
+    // calculate degrees of freedom
+    double t1 = variance[0] / length[0];
+    double t2 = variance[1] / length[1];
+    double df = t1 + t2;
+    df *= df;
+    t1 *= t1;
+    t2 *= t2;
+    t1 /= (length[0] - 1);
+    t2 /= (length[1] - 1);
+    df /= (t1 + t2); // finished
+
+    // calculate standard error
+    double stderror = sqrt(variance[0]/length[0] + variance[1]/length[1]);
+
+    // calculate difference and t-statistic
+    double diffmeans = mean[1] - mean[0];
+    // this uses pooled
+    // double t_statistic = diffmeans / (stddev_pool * sqrt(1.0 / length[0] + 1.0 / length[1]));
+    // now for welch's test
+    double t_statistic = diffmeans / stderror;
+
+    students_t dist(df);
+    double p_value = cdf(complement(dist, fabs(t_statistic)));
+
+
+    // print out statistics
+    std::cout<<"\nTwo-Sample Two-Tailed T-Test GPU results: \n";
+    std::cout<<"Sample size[0]: \t"<<length[0]<<"\n";
+    std::cout<<"Sample mean[0]: \t"<<mean[0]<<"\n";
+    std::cout<<"Sample std dev[0]: \t"<<stddev[0]<<"\n";
+    std::cout<<"Sample size[1]: \t"<<length[1]<<"\n";
+    std::cout<<"Sample mean[1]: \t"<<mean[1]<<"\n";
+    std::cout<<"Sample std dev[1]: \t"<<stddev[1]<<"\n\n";
+    std::cout<<"Difference of means: \t\t"<<diffmeans<<"\n";
+    std::cout<<"Degrees of freedom: \t\t"<<df<<"\n";
+    std::cout<<"Standard error of difference: \t"<<stderror<<"\n";
+    std::cout<<"\nT-statistic for difference of means compared to null hypothesis: "<<t_statistic<<"\n";
+    std::cout<<"Alpha value: \t\t"<<alpha<<"\n";
+    std::cout<<"P-value: \t\t"<<p_value<<"\n";
+    std::cout<<"We "<<(p_value >= alpha/2 ? "fail to" : "")<<" reject the null hypothesis.\n";
+
+    printf("\nGPU runtime: %.4f ms\n",gpu_time);
+}
 
 int main(int argc, char *argv[])
 {
 	// Test_Decypt();
-	Test_Entire_CPU(argv[1]);
-	// Test_Entire_GPU(argv[1]);
+	// Test_Entire_CPU(argv[1]);
+	Test_Entire_GPU(argv[1]);
 	return 0;
 }
