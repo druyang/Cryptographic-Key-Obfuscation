@@ -1,0 +1,3 @@
+const unsigned ll e = 963443092119039113;
+const unsigned ll d = 920403722748280569;
+const unsigned ll n = 2108958572404460311;
