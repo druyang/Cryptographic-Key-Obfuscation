@@ -620,6 +620,8 @@ void CPU_One_Sample_T_Interval(unsigned ll *data, int numcols)
     // calculate margin of error
     double moe = t_statistic * stderror;
 
+    // Runtime:
+    std::cout<<"CPU runtime: "<<cpu_time.count()*1000.<<" ms."<<std::endl;
 
     // print out statistics
     std::cout<<"\nOne-Sample T-Interval CPU results: \n";
@@ -630,8 +632,6 @@ void CPU_One_Sample_T_Interval(unsigned ll *data, int numcols)
     std::cout<<"\nT-statistic for 95 percent confidence interval: \t"<<t_statistic<<"\n";
     std::cout<<"Margin of error for this sample: \t\t"<<moe<<"\n";
     std::cout<<"95 percent confident that the true population mean lies between "<<mean-moe<<" and "<<mean+moe<<"\n";
-
-    std::cout<<"CPU runtime: "<<cpu_time.count()*1000.<<" ms."<<std::endl;
 }
 
 void CPU_Two_Sample_T_Test(unsigned ll *data, unsigned ll *categories, int numcols)
@@ -704,6 +704,8 @@ void CPU_Two_Sample_T_Test(unsigned ll *data, unsigned ll *categories, int numco
     double p_value = cdf(complement(dist, fabs(t_statistic)));
 
     
+    // runtime:
+    std::cout<<"CPU runtime: "<<cpu_time.count()*1000.<<" ms."<<std::endl;
 
     // print out statistics
     std::cout<<"\nTwo-Sample Two-Tailed T-Test CPU results: \n";
@@ -721,7 +723,6 @@ void CPU_Two_Sample_T_Test(unsigned ll *data, unsigned ll *categories, int numco
     std::cout<<"P-value: \t\t"<<p_value<<"\n";
     std::cout<<"We "<<(p_value >= alpha/2 ? "fail to" : "")<<" reject the null hypothesis.\n";
 
-    std::cout<<"CPU runtime: "<<cpu_time.count()*1000.<<" ms."<<std::endl;
 }
 
 struct std_dev_func
