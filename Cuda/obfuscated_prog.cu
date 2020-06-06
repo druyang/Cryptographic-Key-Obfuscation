@@ -488,7 +488,7 @@ __host__ void Test_Entire_GPU(char *dataname)
     // **** GPU TRANSPOSE **** //
     unsigned ll* cipher_gpu;
     cudaMalloc((void**)&cipher_gpu, numrows * numcols * sizeof(unsigned ll));
-    cudaMemcpy(cipher_gpu, cipher, numrows * data_cols * sizeof(unsigned ll),
+    cudaMemcpy(cipher_gpu, cipher, numrows * numcols * sizeof(unsigned ll),
     	    cudaMemcpyHostToDevice);
 
     unsigned ll *cipher_transpose_gpu; 
@@ -507,8 +507,8 @@ __host__ void Test_Entire_GPU(char *dataname)
 
     unsigned ll *indep_data_gpu;
     unsigned ll *dep_data_gpu;
-    // cudaMalloc((void**)&indep_data_gpu, numrows * sizeof(ll));
-    // cudaMalloc((void**)&dep_data_gpu, numrows * sizeof(ll));
+    cudaMalloc((void**)&indep_data_gpu, numrows * sizeof(ll));
+    cudaMalloc((void**)&dep_data_gpu, numrows * sizeof(ll));
     thrust::device_vector<unsigned ll> indep_data_thrust(numrows);
     thrust::device_vector<unsigned ll> dep_data_thrust(numrows);
     indep_data_gpu = thrust::raw_pointer_cast(indep_data_thrust.data());
@@ -539,16 +539,16 @@ __host__ void Test_Entire_GPU(char *dataname)
     // TODO: change this to both c
     unsigned ll *dep_cipher_host = new unsigned ll[numrows]; 
     unsigned ll *indep_cipher_host = new unsigned ll[numrows]; 
-	cudaMemcpy(dep_cipher_gpu, dep_cipher_host, numrows * sizeof(ll),
+	cudaMemcpy(dep_cipher_host, dep_cipher_gpu, numrows * sizeof(ll),
             cudaMemcpyDeviceToHost);
-    cudaMemcpy(indep_cipher_gpu, indep_cipher_host, numrows * sizeof(ll),
+    cudaMemcpy(indep_cipher_host, indep_cipher_gpu, numrows * sizeof(ll),
             cudaMemcpyDeviceToHost);
 
     unsigned ll *dep_data_host = new unsigned ll[numrows]; 
     unsigned ll *indep_data_host = new unsigned ll[numrows]; 
-    cudaMemcpy(dep_data_gpu, dep_data_host, numrows * sizeof(ll),
+    cudaMemcpy(dep_data_host, dep_data_gpu, numrows * sizeof(ll),
             cudaMemcpyDeviceToHost);
-    cudaMemcpy(indep_data_gpu, indep_data_host, numrows * sizeof(ll),
+    cudaMemcpy(indep_data_host, indep_data_gpu, numrows * sizeof(ll),
             cudaMemcpyDeviceToHost);
             
     printf("Datalength:%d\n", datalength);
@@ -567,7 +567,7 @@ __host__ void Test_Entire_GPU(char *dataname)
 
 	// printf("\nSpeedup: %.4f X\n", (float)(duration.count()) / gpu_time);
 
-    // Statistics_GPU(indep_data_thrust, dep_data_thrust, numcols);
+    Statistics_GPU(indep_data_thrust, dep_data_thrust, numrows);
 
 	munmap(cipher, datalength);
 	close(fd);
@@ -896,7 +896,7 @@ void GPU_Two_Sample_T_Test(thrust::device_vector<unsigned ll> data, thrust::devi
 int main(int argc, char *argv[])
 {
 	// Test_Decypt();
-	// Test_Entire_CPU(argv[1]);
+	Test_Entire_CPU(argv[1]);
 	Test_Entire_GPU(argv[1]);
 	return 0;
 }
