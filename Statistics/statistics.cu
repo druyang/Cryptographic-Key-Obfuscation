@@ -79,7 +79,7 @@ int32_t *File_To_Array(const char *filename, int &length, int &fd)
     }
 
     // get length of the file in int32_t
-    length = sb.st_size / 4;
+    length = sb.st_size / 8;
 
     // mmap asks the OS to provision a chunk of disk storage out to contiguous (read aligned, coalesced) RAM
     // this is the reverse of using 'swap space' to cache some RAM out to disk when under memory pressure
