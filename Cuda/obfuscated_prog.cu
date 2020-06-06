@@ -567,7 +567,7 @@ __host__ void Test_Entire_GPU(char *dataname)
 
 	// printf("\nSpeedup: %.4f X\n", (float)(duration.count()) / gpu_time);
 
-    // Statistics_GPU(indep_data_thrust, dep_data_thrust, numcols);
+    Statistics_GPU(indep_data_thrust, dep_data_thrust, numrows);
 
 	munmap(cipher, datalength);
 	close(fd);
@@ -896,7 +896,7 @@ void GPU_Two_Sample_T_Test(thrust::device_vector<unsigned ll> data, thrust::devi
 int main(int argc, char *argv[])
 {
 	// Test_Decypt();
-	// Test_Entire_CPU(argv[1]);
+	Test_Entire_CPU(argv[1]);
 	Test_Entire_GPU(argv[1]);
 	return 0;
 }
