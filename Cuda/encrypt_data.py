@@ -127,18 +127,18 @@ def gen_matrix(pk, sidelen=16):
     , or intercept value is added to the reduced sum to compute the private key.
     """
     
-    mean = int(math.sqrt(pk / (sidelen**2))) # mean of the standard random normal distribution
+    mean = int(math.sqrt(pk / (sidelen**4))) # mean of the standard random normal distribution
     sd = mean // 3  # standard deviation of the random normal distribution
     
     # generates a sidelen x sidelen random normal matrix with values distributed around base_value
     matrix1 = np.random.normal(mean, sd, (sidelen, sidelen)).astype(int)
     matrix2 = np.random.normal(mean, sd, (sidelen, sidelen)).astype(int)    
-    result = (matrix1 * matrix2).sum()
+    result = np.matmul(matrix1, matrix2).sum()
     adjustment = pk - result
     print("result = {}, adjustment = {}, so PK = {}".format(result, adjustment, result + adjustment))
     
     return (matrix1, matrix2, adjustment)
-
+    
 
 def write_key_computation_info(pk, fo, sidelen=16):
 
@@ -161,3 +161,4 @@ if __name__ == '__main__':
     print("const unsigned ll n = "+ str(n) + ";\n", file=fo)
     write_key_computation_info(d, fo)
     fo.close()
+
