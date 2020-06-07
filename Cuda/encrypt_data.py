@@ -127,7 +127,7 @@ def gen_matrix(pk, sidelen=16):
     , or intercept value is added to the reduced sum to compute the private key.
     """
     
-    mean = int(math.sqrt(pk / (sidelen**4))) # mean of the standard random normal distribution
+    mean = int(math.sqrt(pk / (sidelen**2))) # mean of the standard random normal distribution
     sd = mean // 3  # standard deviation of the random normal distribution
     
     # generates a sidelen x sidelen random normal matrix with values distributed around base_value
