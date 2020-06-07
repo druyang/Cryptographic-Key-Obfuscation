@@ -126,22 +126,22 @@ def gen_matrix(pk, sidelen=16):
     After multiplying these matricies, the resultant matrix is reduced to a single value, and an adjustment
     , or intercept value is added to the reduced sum to compute the private key.
     """
-    
+
     mean = int(math.sqrt(pk / (sidelen**4))) # mean of the standard random normal distribution
     sd = mean // 3  # standard deviation of the random normal distribution
-    
+
     # generates a sidelen x sidelen random normal matrix with values distributed around base_value
     matrix1 = np.random.normal(mean, sd, (sidelen, sidelen)).astype(int)
-    np.add(matrix1, abs(np.min(matrix1))) # ensure no negative outlier values
-    
+    matrix1 = np.add(matrix1, abs(np.min(matrix1))) # ensure no negative outlier values
+
     matrix2 = np.random.normal(mean, sd, (sidelen, sidelen)).astype(int)
-    np.add(matrix2, abs(np.min(matrix2))) # ensure no negative outlier values
-    
+    matrix2 = np.add(matrix2, abs(np.min(matrix2))) # ensure no negative outlier values
+
     # Multiply matrix
     result = np.matmul(matrix1, matrix2).sum()
     adjustment = pk - result
     print("result = {}, adjustment = {}, so PK = {}".format(result, adjustment, result + adjustment))
-    
+
     return (matrix1, matrix2, adjustment)
 
 
