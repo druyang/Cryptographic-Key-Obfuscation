@@ -132,13 +132,18 @@ def gen_matrix(pk, sidelen=16):
     
     # generates a sidelen x sidelen random normal matrix with values distributed around base_value
     matrix1 = np.random.normal(mean, sd, (sidelen, sidelen)).astype(int)
-    matrix2 = np.random.normal(mean, sd, (sidelen, sidelen)).astype(int)    
+    np.add(matrix1, abs(np.min(matrix1))) # ensure no negative outlier values
+    
+    matrix2 = np.random.normal(mean, sd, (sidelen, sidelen)).astype(int)
+    np.add(matrix2, abs(np.min(matrix2))) # ensure no negative outlier values
+    
+    # Multiply matrix
     result = np.matmul(matrix1, matrix2).sum()
     adjustment = pk - result
     print("result = {}, adjustment = {}, so PK = {}".format(result, adjustment, result + adjustment))
     
     return (matrix1, matrix2, adjustment)
-    
+
 
 def write_key_computation_info(pk, fo, sidelen=16):
 
