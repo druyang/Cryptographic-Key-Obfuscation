@@ -40,14 +40,10 @@ __device__  __constant__ unsigned ll m2[16*16] = {
 
 // const unsigned int data_rows = 1000;
 // const unsigned int data_cols = 10;
-const unsigned ll e = 963443092119039113;
 const unsigned ll d = 920403722748280569;
 const unsigned ll n = 2108958572404460311;
 const unsigned ll offset = 845690870767227654;
 const int TRANSPOSE_BLOCK_DIM = 8;
-
-const int linewidth = 64 * 8;
-#define C(i,j) i*linewidth + j
 
 void Statistics_CPU(unsigned ll *indep, unsigned ll *dep, int numcols);
 void Statistics_GPU(thrust::device_vector<unsigned ll> indep, thrust::device_vector<unsigned ll> dep, int numcols);
@@ -376,7 +372,6 @@ __host__ void Test_Entire_GPU(char *dataname)
     cout<<host_d[0]<<endl;
     
 
-	const int linewidth = 64 * 8;
 	int fd;
 	int datalength; // already changed to bytes/8
 
