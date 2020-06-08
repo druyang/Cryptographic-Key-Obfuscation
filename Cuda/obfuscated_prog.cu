@@ -249,7 +249,7 @@ unsigned ll* File_To_Array(const char *filename, int &length, int &fd)
         exit(-1);
     }
 
-    // get length of the file in int32_t
+    // get length of the file in 64-bit chunks
     length = sb.st_size / 8;
 
     // mmap asks the OS to provision a chunk of disk storage out to contiguous (read aligned, coalesced) RAM
@@ -621,6 +621,7 @@ void CPU_Two_Sample_T_Test(unsigned ll *data, unsigned ll *categories, int numco
     std::cout<<"CPU runtime: "<<cpu_time.count()*1000.<<" ms."<<std::endl;
 }
 
+// functor to calculate standard deviation using thrust, by passing in the mean and subtracting/squaring
 struct std_dev_func
 {
 	double mean = 0.0;
