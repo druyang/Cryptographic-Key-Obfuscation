@@ -61,6 +61,14 @@ int main(int argc, char *argv[])
     }
     printf("\n\n");
 
+    printf("****PRINTING FILE AS UNSIGNED LONGS****\n\n");
+    uint64_t *file_long = (uint64_t *)file_in_memory;
+    for (int i = 0; i < sb.st_size / 8; i++)
+    {
+        printf("%llu\n", file_long[i]);
+    }
+    printf("\n\n");
+
     // if at any point we wanted to break this out as a 2d array, we just need to have a predetermined line length
     // and could then index into it as a 2d array by using offsets
 

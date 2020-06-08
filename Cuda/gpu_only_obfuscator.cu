@@ -43,12 +43,7 @@ const unsigned ll n = 2108958572404460311;
 const unsigned ll offset = 845690870767227654;
 const int TRANSPOSE_BLOCK_DIM = 8;
 
-void Statistics_CPU(unsigned ll *indep, unsigned ll *dep, int numcols);
 void Statistics_GPU(thrust::device_vector<unsigned ll> indep, thrust::device_vector<unsigned ll> dep, int numcols);
-
-void CPU_One_Sample_T_Interval(unsigned ll *data, int numcols);
-void CPU_Two_Sample_T_Test(unsigned ll *data, unsigned ll *categories, int numcols);
-
 void GPU_One_Sample_T_Interval(thrust::device_vector<unsigned ll> data, int numcols);
 void GPU_Two_Sample_T_Test(thrust::device_vector<unsigned ll> data, thrust::device_vector<unsigned ll> categories, int numcols);
 
@@ -173,7 +168,7 @@ unsigned ll* File_To_Array(const char *filename, int &length, int &fd)
         exit(-1);
     }
 
-    // get length of the file in int32_t
+    // get length of the file in 64-bit chunks
     length = sb.st_size / 8;
 
     // mmap asks the OS to provision a chunk of disk storage out to contiguous (read aligned, coalesced) RAM
@@ -210,9 +205,8 @@ __host__ void Test_Entire_GPU(char *dataname)
 	// Test GPU //
     //////////////
 
+    // pointer to key on device memory
     unsigned ll* d = Calculate_Key();
-
-    unsigned ll* host_d = (unsigned ll*)malloc(sizeof(unsigned ll));
 
 	int fd;
 	int datalength; // already changed to bytes/8
@@ -241,9 +235,9 @@ __host__ void Test_Entire_GPU(char *dataname)
     const int block_num_y= ceil((double) numrows / (double) block_size);
 
     transposeCoalesced<<<dim3(block_num_x,block_num_y),dim3(block_size,block_size)>>>
-    (cipher_gpu, cipher_transpose_gpu, numrows, numcols);
+        (cipher_gpu, cipher_transpose_gpu, numrows, numcols);
 
-    // Get columns that we will be operating on;
+    // Get columns that we will be operating on
 	unsigned ll *indep_cipher_gpu = &cipher_transpose_gpu[independent_col*numrows];
     unsigned ll *dep_cipher_gpu = &cipher_transpose_gpu[dependent_col*numrows];
 
@@ -285,6 +279,7 @@ __host__ void Test_Entire_GPU(char *dataname)
 	close(fd);
 }
 
+// functor to calculate standard deviation using thrust, by passing in the mean and subtracting/squaring
 struct std_dev_func
 {
 	double mean = 0.0;
@@ -364,7 +359,6 @@ void GPU_Two_Sample_T_Test(thrust::device_vector<unsigned ll> data, thrust::devi
 
     double mean[2] = { 0, 0 };
     int length[2] = { 0, 0 };
-    // int blank[2]; //dummy array
 
     // key-sort the two vectors such that we have separated categories
     thrust::sort_by_key(categories.begin(), categories.end(), data.begin());
@@ -378,7 +372,6 @@ void GPU_Two_Sample_T_Test(thrust::device_vector<unsigned ll> data, thrust::devi
     cudaEventDestroy(start);
     cudaEventDestroy(end);
 
-
     cudaEventCreate(&start);
     cudaEventCreate(&end);
     gpu_time=0.0f;
@@ -389,7 +382,6 @@ void GPU_Two_Sample_T_Test(thrust::device_vector<unsigned ll> data, thrust::devi
     cudaStream_t s1, s2;
     cudaStreamCreate(&s1);
     cudaStreamCreate(&s2);
-
 
     // calculate both means
     mean[0] = thrust::reduce(thrust::cuda::par.on(s1), data.begin(), data.begin() + length[0], (double)0, thrust::plus<double>());
@@ -435,8 +427,6 @@ void GPU_Two_Sample_T_Test(thrust::device_vector<unsigned ll> data, thrust::devi
 
     // calculate difference and t-statistic
     double diffmeans = mean[1] - mean[0];
-    // this uses pooled
-    // double t_statistic = diffmeans / (stddev_pool * sqrt(1.0 / length[0] + 1.0 / length[1]));
     // now for welch's test
     double t_statistic = diffmeans / stderror;
 
@@ -459,7 +449,6 @@ void GPU_Two_Sample_T_Test(thrust::device_vector<unsigned ll> data, thrust::devi
     std::cout<<"Alpha value: \t\t"<<alpha<<"\n";
     std::cout<<"P-value: \t\t"<<p_value<<"\n";
     std::cout<<"We "<<(p_value >= alpha/2 ? "fail to" : "")<<" reject the null hypothesis.\n";
-
 }
 
 int main(int argc, char *argv[])
