@@ -38,9 +38,7 @@ __device__  __constant__ unsigned ll m2[16*16] = {
     5402623, 3995627, 6743696, 3542762, 4575592, 3695284, 3918622, 4538491, 6181070, 2512172, 4698104, 4163423, 4292282, 4453561, 1477165, 4966421, 4736401, 4810828, 5344335, 4837246, 4286233, 2634311, 4147100, 1921287, 6340262, 4113615, 3795215, 4211793, 2113035, 2556419, 2938045, 5122808, 4298089, 4512884, 3691197, 5534985, 4851922, 2772637, 2236804, 6120396, 2929315, 4143837, 3787446, 3239459, 4775456, 865982, 4496660, 1703666, 1599063, 4549671, 3501246, 1249567, 3323392, 4137217, 4195107, 6887026, 4291745, 5286819, 4357805, 2681316, 3140604, 4414659, 2713437, 4684680, 4623493, 2717830, 5068866, 5504463, 4723859, 6560104, 3436816, 5727689, 1648325, 4410464, 3260375, 3527822, 3801152, 5313457, 3446586, 5860645, 4737773, 5422197, 2731218, 4057691, 4550777, 5336448, 3092465, 2570986, 4040807, 3075376, 4867819, 4488883, 5773716, 3522895, 2814470, 5650927, 4377915, 4178781, 4884170, 3743092, 2828557, 4740730, 3232547, 4097158, 4680480, 5160081, 4033217, 2703093, 1601640, 5648239, 3977663, 5292342, 1858079, 5437452, 5778958, 3868468, 4060999, 3947463, 5609988, 4810874, 5726724, 4889048, 3297829, 4738813, 6375997, 3406592, 5284049, 4546058, 5626721, 4157315, 6594087, 6505334, 7104890, 3101450, 4471290, 4693939, 1906608, 6790147, 2749917, 4280580, 4847134, 5819494, 2243550, 2962854, 1061216, 3903053, 5066876, 4876405, 4163034, 4753225, 6430668, 4729571, 4429114, 5100039, 6968806, 4146280, 4409023, 4459757, 2614041, 5123350, 4132817, 4575138, 3217081, 4959027, 3843245, 6940258, 4267578, 3587797, 3931136, 5217963, 6225758, 2514754, 4230712, 5868142, 4260445, 4583537, 4107203, 1696201, 3402111, 4265050, 5518600, 5989181, 1619745, 3704475, 4369304, 2739916, 4914357, 3048664, 5007979, 4977233, 2376675, 3990140, 1889822, 3240595, 2616037, 2789849, 4489124, 4465373, 4793428, 6241130, 674170, 3887638, 3952595, 3276410, 3403888, 3426655, 5523518, 3812274, 5021758, 4478267, 3835431, 2826298, 3810009, 3389970, 4590227, 5646501, 698792, 4943485, 3322046, 3383689, 2234016, 2160407, 2022331, 5654802, 5180190, 3407774, 3774041, 4347928, 5845572, 2056892, 6877570, 2917990, 3144028, 2784578, 4687680, 4418303, 4558507, 5042387, 3523901, 4224349, 3338556, 5510521, 2140311, 3958657, 4013730, 1295751, 3730229, 1555011, 4265546, 4450370, 2322128, 1232047, 5340683, 3901175, 5102033, 4321191
 };
 
-// const unsigned int data_rows = 1000;
-// const unsigned int data_cols = 10;
-const unsigned ll d = 920403722748280569;
+// Safe to store n in the code since n is a component of the public key
 const unsigned ll n = 2108958572404460311;
 const unsigned ll offset = 845690870767227654;
 const int TRANSPOSE_BLOCK_DIM = 8;
@@ -94,80 +92,6 @@ unsigned ll* Calculate_Key()
     return key_dev;
 }
 
-
-__host__ void print_1D(unsigned ll* data, int length) {
-	// for (int i = 0; i < min(length, 20); i++) {
-	// 	std::cout << data[i] << ' ';
-    // }
-    for (int i = length-20; i < length; i++) {
-        std::cout << data[i] << ' ';
-    }
-	std::cout << std::endl;
-}
-
-
-// determines whether or not overflow will occur
-__host__ bool is_overflow(unsigned ll a, unsigned ll b) 
-{ 
-    // Check if either of them is zero 
-    if (a == 0 || b == 0)  
-        return false; 
-
-    unsigned long long result = a * b; 
-    if (a == result / b) 
-        return false; 
-    else
-        return true; 
-} 
-
-
-// Computes (a * b) % n
-__host__ unsigned ll modmult(unsigned ll a, unsigned ll b, unsigned ll n)
-{
-	unsigned ll res = 0;
-	a = a % n;
-
-	// if a * b mod n can be computed direclty, compute it right away.
-	if (!(is_overflow(a, b + 1))) return (a * b) % n;
-	
-	while (b > 0) {
-
-		if (b % 2 == 1)
-			res = (res + a) % n;
-		
-		b = b >> 1;
-		a = (a * 2) % n;
-	}
-
-	return res;
-}
-
-
-// Computes (msg ** exponent) % n
-__host__ ll modexp(unsigned ll msg, unsigned ll exponent, unsigned ll n)
-{
-	unsigned ll res = 1; // Initialize result
-	msg = msg % n; // Update msg if it is more than or equal to n
-	while (exponent > 0) {
- 		// If exponent is odd, multiply x with result
-		if (exponent % 2 == 1)
-			res = modmult(res, msg, n);
-
- 		// exponent must be even now
- 		exponent = exponent >> 1; // exponent = exponent/2
- 		msg = modmult(msg, msg, n); // compute (msg^2) % n
-	}
-
-	return res;
-}
-
-
-__host__ void cpu_decrypt(unsigned ll* cipher, unsigned ll* data, int length)
-{
-	for (unsigned int i = 0; i < length; i++) {
-		data[i] = modexp(cipher[i], d, n);
-	}
-}
 
 // determines whether or not overflow will occur
 __device__ bool is_overflow_dev(unsigned ll a, unsigned ll b) 
@@ -280,85 +204,6 @@ __global__ void transposeCoalesced(const unsigned ll* A, unsigned ll* AT, const 
 	}
 }
 
-__host__ void Test_Entire_CPU(char *dataname)
-{
-	//////////////
-	// Test CPU //
-	//////////////
-
-	int fd;
-	int datalength; // already changed to bytes/8
-	
-	// we need to pass in dataname as the filename into this
-    unsigned ll *cipher = File_To_Array(dataname, datalength, fd);
-    
-
-	// calculate matrix size
-	const int numcols = 8;
-    int numrows = datalength / numcols;
-    
-    printf("Datalength:%d\n", datalength);
-    printf("Cols:%d\n", numcols);
-    printf("Rows:%d\n", numrows); // should be 
-
-	// **** CPU TRANSPOSE **** //
-	unsigned ll *transpose = new unsigned ll[datalength];
-	for (int i = 0; i < numrows; i++) {
-		for (int j = 0; j < numcols; j++) {
-			transpose[j * numrows + i] = cipher[i * numcols + j];
-		}
-    }
-    
-	// 0 = pid, 1 = male, 2 = female, 3 = other gender, 4 = age
-	// 5 = deceased, 6 = released, 7 = in progress
-	const int independent_col = 2; // female
-	const int dependent_col = 5; // rate of deceased
-	
-	unsigned ll *indep_cipher = &transpose[independent_col*numrows];
-	unsigned ll *dep_cipher = &transpose[dependent_col*numrows];
-	
-	printf("\nCipher text from file:\n");
-	print_1D(indep_cipher, numrows);
-	print_1D(dep_cipher, numrows);
-	
-    // Decrypt CPU:
-	auto start_time = high_resolution_clock::now();
-	
-	unsigned ll *indep_decoded = new unsigned ll[numrows];
-	unsigned ll *dep_decoded = new unsigned ll[numrows];
-	
-	cpu_decrypt(indep_cipher, indep_decoded, numrows);
-	cpu_decrypt(dep_cipher, dep_decoded, numrows);
-    printf("\nData after decryption on CPU \n");
-    
-	print_1D(indep_decoded, numrows);
-    print_1D(dep_decoded, numrows);
-
-    printf("\nData after depadding on CPU \n");
-
-    for (int i = 0; i < numrows; i++) {
-        indep_decoded[i] &= 0x00000000ffffffff; //0x0000ffffffffffff
-        dep_decoded[i] &= 0x00000000ffffffff;
-        // printf("\n%ld\n", 0x0000ffffffffffff);
-    }
-
-    print_1D(indep_decoded, numrows);
-    print_1D(dep_decoded, numrows);
-    
-    
-    auto stop_time = high_resolution_clock::now();
-	auto duration = duration_cast<microseconds>(stop_time - start_time);
-
-	cout << "\n\n";
-	cout << "CPU Decryption Runtime: " << duration.count()/1000. << " ms" << endl; 
-
-	// this assumes we transpose. if we don't, we need different parameters
-	Statistics_CPU(indep_decoded, dep_decoded, numrows);
-
-	munmap(cipher, datalength);
-	close(fd);
-}
-
 __host__ void Test_Entire_GPU(char *dataname)
 {
 	//////////////
@@ -368,9 +213,6 @@ __host__ void Test_Entire_GPU(char *dataname)
     unsigned ll* d = Calculate_Key();
 
     unsigned ll* host_d = (unsigned ll*)malloc(sizeof(unsigned ll));
-    cudaMemcpy(host_d, d, sizeof(unsigned ll), cudaMemcpyDeviceToHost);
-    cout<<host_d[0]<<endl;
-    
 
 	int fd;
 	int datalength; // already changed to bytes/8
@@ -435,190 +277,12 @@ __host__ void Test_Entire_GPU(char *dataname)
 	cudaEventDestroy(start);
 	cudaEventDestroy(end);
 
-    unsigned ll *dep_cipher_host = new unsigned ll[numrows]; 
-    unsigned ll *indep_cipher_host = new unsigned ll[numrows]; 
-	cudaMemcpy(dep_cipher_host, dep_cipher_gpu, numrows * sizeof(ll),
-            cudaMemcpyDeviceToHost);
-    cudaMemcpy(indep_cipher_host, indep_cipher_gpu, numrows * sizeof(ll),
-            cudaMemcpyDeviceToHost);
-
-    unsigned ll *dep_data_host = new unsigned ll[numrows]; 
-    unsigned ll *indep_data_host = new unsigned ll[numrows]; 
-    cudaMemcpy(dep_data_host, dep_data_gpu, numrows * sizeof(ll),
-            cudaMemcpyDeviceToHost);
-    cudaMemcpy(indep_data_host, indep_data_gpu, numrows * sizeof(ll),
-            cudaMemcpyDeviceToHost);
-    
-    printf("Datalength:%d\n", datalength);
-    printf("Cols:%d\n", numcols);
-    printf("Rows:%d\n", numrows); 
-
-    printf("\nCipher text:\n");
-    print_1D(indep_cipher_host, numrows);
-    print_1D(dep_cipher_host, numrows);
-
-	printf("\nData after decryption and depadding on GPU\n");
-    print_1D(indep_data_host, numrows);
-    print_1D(dep_data_host, numrows);
-
 	printf("\nGPU runtime: %.4f ms\n", gpu_time);
-
-	// printf("\nSpeedup: %.4f X\n", (float)(duration.count()) / gpu_time);
 
     Statistics_GPU(indep_data_thrust, dep_data_thrust, numrows);
 
 	munmap(cipher, datalength);
 	close(fd);
-}
-
-void Statistics_CPU(unsigned ll *indep, unsigned ll *dep, int numcols)
-{
-    CPU_One_Sample_T_Interval(dep, numcols);
-
-    CPU_Two_Sample_T_Test(dep, indep, numcols);
-}
-
-void CPU_One_Sample_T_Interval(unsigned ll *data, int numcols)
-{
-    // timer
-    auto cpu_start = system_clock::now();
-
-    const double confidence = 0.95;
-
-    // calculate mean
-    double mean;
-    double castdata;
-    for (int i = 0; i < numcols; i++) {
-        castdata = (double)data[i];
-        // std::cout<<(double)castdata<<"\n";
-        mean += castdata / numcols;
-    }
-
-    double stddev;
-    double difference;
-    // calculate std deviation
-    for (int i = 0; i < numcols; i++) {
-        castdata = (double)data[i];
-        difference = castdata - mean;
-        // std::cout<<difference<<"\n";
-        stddev += difference * difference / (numcols-1);
-    }
-    stddev = sqrt(stddev);
-
-    auto cpu_end = system_clock::now();
-    duration<double> cpu_time=cpu_end-cpu_start;
-
-    // standard error
-    double stderror = stddev / sqrt(numcols);
-
-    // calculate t-statistic
-    students_t dist(numcols - 1);
-    double t_statistic = quantile(dist, confidence/2+0.5);
-
-    // calculate margin of error
-    double moe = t_statistic * stderror;
-
-    // print out statistics
-    std::cout<<"\nOne-Sample T-Interval CPU results: \n";
-    std::cout<<"Sample size: \t\t"<<numcols<<"\n";
-    std::cout<<"Sample mean: \t\t"<<mean<<"\n";
-    std::cout<<"Sample std dev: \t"<<stddev<<"\n";
-    std::cout<<"Standard error: \t"<<stderror<<"\n";
-    std::cout<<"\nT-statistic for 95 percent confidence interval: \t"<<t_statistic<<"\n";
-    std::cout<<"Margin of error for this sample: \t\t"<<moe<<"\n";
-    std::cout<<"95 percent confident that the true population mean lies between "<<mean-moe<<" and "<<mean+moe<<"\n";
-
-    // Runtime:
-    std::cout<<"CPU runtime: "<<cpu_time.count()*1000.<<" ms."<<std::endl;
-}
-
-void CPU_Two_Sample_T_Test(unsigned ll *data, unsigned ll *categories, int numcols)
-{
-    auto cpu_start = system_clock::now();
-
-    // level for statistical significance
-    const double alpha = 0.05;
-
-    // calculate mean
-    double mean[2] = { 0, 0 };
-    int length[2] = { 0, 0 };
-    double castdata;
-    int index;
-    for (int i = 0; i < numcols; i++) {
-        castdata = (double)data[i];
-        // std::cout<<(double)castdata<<"\n";
-        index = categories[i];
-        length[index]++; 
-        mean[index] += castdata;
-    }
-    mean[0] /= length[0];
-    mean[1] /= length[1];
-
-    double stddev[2] = { 0, 0 };
-    double variance[2] = { 0, 0 };
-    double difference;
-    // calculate std deviation and variance
-    for (int i = 0; i < numcols; i++) {
-        castdata = (double)data[i];
-        index = categories[i];
-        difference = castdata - mean[index];
-        // std::cout<<difference<<"\n";
-        variance[index] += difference * difference / (length[index]-1);
-    }
-    stddev[0] = sqrt(variance[0]);
-    stddev[1] = sqrt(variance[1]);
-
-    auto cpu_end = system_clock::now();
-    duration<double> cpu_time=cpu_end-cpu_start;
-
-    //// calculate pooled deviation and degrees of freedom
-    // double df = length[0] + length[1] - 2;
-    // double stddev_pool = (length[0]-1)*variance[0] + (length[1]-1)*variance[1];
-    // stddev_pool = sqrt(stddev_pool/df);
-
-    // use welch's t-test for more sophistication under different variances
-    // calculate degrees of freedom
-    double t1 = variance[0] / length[0];
-    double t2 = variance[1] / length[1];
-    double df = t1 + t2;
-    df *= df;
-    t1 *= t1;
-    t2 *= t2;
-    t1 /= (length[0] - 1);
-    t2 /= (length[1] - 1);
-    df /= (t1 + t2); // finished
-
-    // calculate standard error
-    double stderror = sqrt(variance[0]/length[0] + variance[1]/length[1]);
-
-    // calculate difference and t-statistic
-    double diffmeans = mean[1] - mean[0];
-    // this uses pooled
-    // double t_statistic = diffmeans / (stddev_pool * sqrt(1.0 / length[0] + 1.0 / length[1]));
-    // now for welch's test
-    double t_statistic = diffmeans / stderror;
-
-    students_t dist(df);
-    double p_value = cdf(complement(dist, fabs(t_statistic)));
-
-    // print out statistics
-    std::cout<<"\nTwo-Sample Two-Tailed T-Test CPU results: \n";
-    std::cout<<"Sample size[0]: \t"<<length[0]<<"\n";
-    std::cout<<"Sample mean[0]: \t"<<mean[0]<<"\n";
-    std::cout<<"Sample std dev[0]: \t"<<stddev[0]<<"\n";
-    std::cout<<"Sample size[1]: \t"<<length[1]<<"\n";
-    std::cout<<"Sample mean[1]: \t"<<mean[1]<<"\n";
-    std::cout<<"Sample std dev[1]: \t"<<stddev[1]<<"\n\n";
-    std::cout<<"Difference of means: \t\t"<<diffmeans<<"\n";
-    std::cout<<"Degrees of freedom: \t\t"<<df<<"\n";
-    std::cout<<"Standard error of difference: \t"<<stderror<<"\n";
-    std::cout<<"\nT-statistic for difference of means compared to null hypothesis: "<<t_statistic<<"\n";
-    std::cout<<"Alpha value: \t\t"<<alpha<<"\n";
-    std::cout<<"P-value: \t\t"<<p_value<<"\n";
-    std::cout<<"We "<<(p_value >= alpha/2 ? "fail to" : "")<<" reject the null hypothesis.\n";
-
-    // runtime:
-    std::cout<<"CPU runtime: "<<cpu_time.count()*1000.<<" ms."<<std::endl;
 }
 
 struct std_dev_func
@@ -683,7 +347,6 @@ void GPU_One_Sample_T_Interval(thrust::device_vector<unsigned ll> data, int data
     std::cout<<"Margin of error for this sample: \t\t"<<moe<<"\n";
     std::cout<<"95 percent confident that the true population mean lies between "<<mean-moe<<" and "<<mean+moe<<"\n";
 
-    printf("\nGPU runtime: %.4f ms\n",gpu_time);
 }
 
 void GPU_Two_Sample_T_Test(thrust::device_vector<unsigned ll> data, thrust::device_vector<unsigned ll> categories, int datalength)
@@ -715,7 +378,6 @@ void GPU_Two_Sample_T_Test(thrust::device_vector<unsigned ll> data, thrust::devi
     cudaEventDestroy(start);
     cudaEventDestroy(end);
 
-    printf("\nGPU sorting runtime: %.4f ms\n",gpu_time);
 
     cudaEventCreate(&start);
     cudaEventCreate(&end);
@@ -798,12 +460,10 @@ void GPU_Two_Sample_T_Test(thrust::device_vector<unsigned ll> data, thrust::devi
     std::cout<<"P-value: \t\t"<<p_value<<"\n";
     std::cout<<"We "<<(p_value >= alpha/2 ? "fail to" : "")<<" reject the null hypothesis.\n";
 
-    printf("\nGPU analysis runtime: %.4f ms\n",gpu_time);
 }
 
 int main(int argc, char *argv[])
 {
-	Test_Entire_CPU(argv[1]);
 	Test_Entire_GPU(argv[1]);
 	return 0;
 }
