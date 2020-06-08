@@ -43,12 +43,7 @@ const unsigned ll n = 2108958572404460311;
 const unsigned ll offset = 845690870767227654;
 const int TRANSPOSE_BLOCK_DIM = 8;
 
-void Statistics_CPU(unsigned ll *indep, unsigned ll *dep, int numcols);
 void Statistics_GPU(thrust::device_vector<unsigned ll> indep, thrust::device_vector<unsigned ll> dep, int numcols);
-
-void CPU_One_Sample_T_Interval(unsigned ll *data, int numcols);
-void CPU_Two_Sample_T_Test(unsigned ll *data, unsigned ll *categories, int numcols);
-
 void GPU_One_Sample_T_Interval(thrust::device_vector<unsigned ll> data, int numcols);
 void GPU_Two_Sample_T_Test(thrust::device_vector<unsigned ll> data, thrust::device_vector<unsigned ll> categories, int numcols);
 
@@ -210,9 +205,8 @@ __host__ void Test_Entire_GPU(char *dataname)
 	// Test GPU //
     //////////////
 
+    // pointer to key on device memory
     unsigned ll* d = Calculate_Key();
-
-    unsigned ll* host_d = (unsigned ll*)malloc(sizeof(unsigned ll));
 
 	int fd;
 	int datalength; // already changed to bytes/8
@@ -241,9 +235,9 @@ __host__ void Test_Entire_GPU(char *dataname)
     const int block_num_y= ceil((double) numrows / (double) block_size);
 
     transposeCoalesced<<<dim3(block_num_x,block_num_y),dim3(block_size,block_size)>>>
-    (cipher_gpu, cipher_transpose_gpu, numrows, numcols);
+        (cipher_gpu, cipher_transpose_gpu, numrows, numcols);
 
-    // Get columns that we will be operating on;
+    // Get columns that we will be operating on
 	unsigned ll *indep_cipher_gpu = &cipher_transpose_gpu[independent_col*numrows];
     unsigned ll *dep_cipher_gpu = &cipher_transpose_gpu[dependent_col*numrows];
 
