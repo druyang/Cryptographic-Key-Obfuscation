@@ -284,85 +284,6 @@ __global__ void transposeCoalesced(const unsigned ll* A, unsigned ll* AT, const 
 	}
 }
 
-__host__ void Test_Entire_CPU(char *dataname)
-{
-	//////////////
-	// Test CPU //
-	//////////////
-
-	int fd;
-	int datalength; // already changed to bytes/8
-	
-	// we need to pass in dataname as the filename into this
-    unsigned ll *cipher = File_To_Array(dataname, datalength, fd);
-    
-
-	// calculate matrix size
-	const int numcols = 8;
-    int numrows = datalength / numcols;
-    
-    printf("Datalength:%d\n", datalength);
-    printf("Cols:%d\n", numcols);
-    printf("Rows:%d\n", numrows); // should be 
-
-	// **** CPU TRANSPOSE **** //
-	unsigned ll *transpose = new unsigned ll[datalength];
-	for (int i = 0; i < numrows; i++) {
-		for (int j = 0; j < numcols; j++) {
-			transpose[j * numrows + i] = cipher[i * numcols + j];
-		}
-    }
-    
-	// 0 = pid, 1 = male, 2 = female, 3 = other gender, 4 = age
-	// 5 = deceased, 6 = released, 7 = in progress
-	const int independent_col = 2; // female
-	const int dependent_col = 5; // rate of deceased
-	
-	unsigned ll *indep_cipher = &transpose[independent_col*numrows];
-	unsigned ll *dep_cipher = &transpose[dependent_col*numrows];
-	
-	printf("\nCipher text from file:\n");
-	print_1D(indep_cipher, numrows);
-	print_1D(dep_cipher, numrows);
-	
-    // Decrypt CPU:
-	auto start_time = high_resolution_clock::now();
-	
-	unsigned ll *indep_decoded = new unsigned ll[numrows];
-	unsigned ll *dep_decoded = new unsigned ll[numrows];
-	
-	cpu_decrypt(indep_cipher, indep_decoded, numrows);
-	cpu_decrypt(dep_cipher, dep_decoded, numrows);
-    printf("\nData after decryption on CPU \n");
-    
-	print_1D(indep_decoded, numrows);
-    print_1D(dep_decoded, numrows);
-
-    printf("\nData after depadding on CPU \n");
-
-    for (int i = 0; i < numrows; i++) {
-        indep_decoded[i] &= 0x00000000ffffffff; //0x0000ffffffffffff
-        dep_decoded[i] &= 0x00000000ffffffff;
-        // printf("\n%ld\n", 0x0000ffffffffffff);
-    }
-
-    print_1D(indep_decoded, numrows);
-    print_1D(dep_decoded, numrows);
-    
-    
-    auto stop_time = high_resolution_clock::now();
-	auto duration = duration_cast<microseconds>(stop_time - start_time);
-
-	cout << "\n\n";
-	cout << "CPU Decryption Runtime: " << duration.count()/1000. << " ms" << endl; 
-
-	// this assumes we transpose. if we don't, we need different parameters
-	Statistics_CPU(indep_decoded, dep_decoded, numrows);
-
-	munmap(cipher, datalength);
-	close(fd);
-}
-
 __host__ void Test_Entire_GPU(char *dataname)
 {
 	//////////////
@@ -372,9 +293,6 @@ __host__ void Test_Entire_GPU(char *dataname)
     unsigned ll* d = Calculate_Key();
 
     unsigned ll* host_d = (unsigned ll*)malloc(sizeof(unsigned ll));
-    cudaMemcpy(host_d, d, sizeof(unsigned ll), cudaMemcpyDeviceToHost);
-    cout<<host_d[0]<<endl;
-    
 
 	const int linewidth = 64 * 8;
 	int fd;
@@ -440,190 +358,12 @@ __host__ void Test_Entire_GPU(char *dataname)
 	cudaEventDestroy(start);
 	cudaEventDestroy(end);
 
-    unsigned ll *dep_cipher_host = new unsigned ll[numrows]; 
-    unsigned ll *indep_cipher_host = new unsigned ll[numrows]; 
-	cudaMemcpy(dep_cipher_host, dep_cipher_gpu, numrows * sizeof(ll),
-            cudaMemcpyDeviceToHost);
-    cudaMemcpy(indep_cipher_host, indep_cipher_gpu, numrows * sizeof(ll),
-            cudaMemcpyDeviceToHost);
-
-    unsigned ll *dep_data_host = new unsigned ll[numrows]; 
-    unsigned ll *indep_data_host = new unsigned ll[numrows]; 
-    cudaMemcpy(dep_data_host, dep_data_gpu, numrows * sizeof(ll),
-            cudaMemcpyDeviceToHost);
-    cudaMemcpy(indep_data_host, indep_data_gpu, numrows * sizeof(ll),
-            cudaMemcpyDeviceToHost);
-    
-    printf("Datalength:%d\n", datalength);
-    printf("Cols:%d\n", numcols);
-    printf("Rows:%d\n", numrows); 
-
-    printf("\nCipher text:\n");
-    print_1D(indep_cipher_host, numrows);
-    print_1D(dep_cipher_host, numrows);
-
-	printf("\nData after decryption and depadding on GPU\n");
-    print_1D(indep_data_host, numrows);
-    print_1D(dep_data_host, numrows);
-
 	printf("\nGPU runtime: %.4f ms\n", gpu_time);
-
-	// printf("\nSpeedup: %.4f X\n", (float)(duration.count()) / gpu_time);
 
     Statistics_GPU(indep_data_thrust, dep_data_thrust, numrows);
 
 	munmap(cipher, datalength);
 	close(fd);
-}
-
-void Statistics_CPU(unsigned ll *indep, unsigned ll *dep, int numcols)
-{
-    CPU_One_Sample_T_Interval(dep, numcols);
-
-    CPU_Two_Sample_T_Test(dep, indep, numcols);
-}
-
-void CPU_One_Sample_T_Interval(unsigned ll *data, int numcols)
-{
-    // timer
-    auto cpu_start = system_clock::now();
-
-    const double confidence = 0.95;
-
-    // calculate mean
-    double mean;
-    double castdata;
-    for (int i = 0; i < numcols; i++) {
-        castdata = (double)data[i];
-        // std::cout<<(double)castdata<<"\n";
-        mean += castdata / numcols;
-    }
-
-    double stddev;
-    double difference;
-    // calculate std deviation
-    for (int i = 0; i < numcols; i++) {
-        castdata = (double)data[i];
-        difference = castdata - mean;
-        // std::cout<<difference<<"\n";
-        stddev += difference * difference / (numcols-1);
-    }
-    stddev = sqrt(stddev);
-
-    auto cpu_end = system_clock::now();
-    duration<double> cpu_time=cpu_end-cpu_start;
-
-    // standard error
-    double stderror = stddev / sqrt(numcols);
-
-    // calculate t-statistic
-    students_t dist(numcols - 1);
-    double t_statistic = quantile(dist, confidence/2+0.5);
-
-    // calculate margin of error
-    double moe = t_statistic * stderror;
-
-    // print out statistics
-    std::cout<<"\nOne-Sample T-Interval CPU results: \n";
-    std::cout<<"Sample size: \t\t"<<numcols<<"\n";
-    std::cout<<"Sample mean: \t\t"<<mean<<"\n";
-    std::cout<<"Sample std dev: \t"<<stddev<<"\n";
-    std::cout<<"Standard error: \t"<<stderror<<"\n";
-    std::cout<<"\nT-statistic for 95 percent confidence interval: \t"<<t_statistic<<"\n";
-    std::cout<<"Margin of error for this sample: \t\t"<<moe<<"\n";
-    std::cout<<"95 percent confident that the true population mean lies between "<<mean-moe<<" and "<<mean+moe<<"\n";
-
-    // Runtime:
-    std::cout<<"CPU runtime: "<<cpu_time.count()*1000.<<" ms."<<std::endl;
-}
-
-void CPU_Two_Sample_T_Test(unsigned ll *data, unsigned ll *categories, int numcols)
-{
-    auto cpu_start = system_clock::now();
-
-    // level for statistical significance
-    const double alpha = 0.05;
-
-    // calculate mean
-    double mean[2] = { 0, 0 };
-    int length[2] = { 0, 0 };
-    double castdata;
-    int index;
-    for (int i = 0; i < numcols; i++) {
-        castdata = (double)data[i];
-        // std::cout<<(double)castdata<<"\n";
-        index = categories[i];
-        length[index]++; 
-        mean[index] += castdata;
-    }
-    mean[0] /= length[0];
-    mean[1] /= length[1];
-
-    double stddev[2] = { 0, 0 };
-    double variance[2] = { 0, 0 };
-    double difference;
-    // calculate std deviation and variance
-    for (int i = 0; i < numcols; i++) {
-        castdata = (double)data[i];
-        index = categories[i];
-        difference = castdata - mean[index];
-        // std::cout<<difference<<"\n";
-        variance[index] += difference * difference / (length[index]-1);
-    }
-    stddev[0] = sqrt(variance[0]);
-    stddev[1] = sqrt(variance[1]);
-
-    auto cpu_end = system_clock::now();
-    duration<double> cpu_time=cpu_end-cpu_start;
-
-    //// calculate pooled deviation and degrees of freedom
-    // double df = length[0] + length[1] - 2;
-    // double stddev_pool = (length[0]-1)*variance[0] + (length[1]-1)*variance[1];
-    // stddev_pool = sqrt(stddev_pool/df);
-
-    // use welch's t-test for more sophistication under different variances
-    // calculate degrees of freedom
-    double t1 = variance[0] / length[0];
-    double t2 = variance[1] / length[1];
-    double df = t1 + t2;
-    df *= df;
-    t1 *= t1;
-    t2 *= t2;
-    t1 /= (length[0] - 1);
-    t2 /= (length[1] - 1);
-    df /= (t1 + t2); // finished
-
-    // calculate standard error
-    double stderror = sqrt(variance[0]/length[0] + variance[1]/length[1]);
-
-    // calculate difference and t-statistic
-    double diffmeans = mean[1] - mean[0];
-    // this uses pooled
-    // double t_statistic = diffmeans / (stddev_pool * sqrt(1.0 / length[0] + 1.0 / length[1]));
-    // now for welch's test
-    double t_statistic = diffmeans / stderror;
-
-    students_t dist(df);
-    double p_value = cdf(complement(dist, fabs(t_statistic)));
-
-    // print out statistics
-    std::cout<<"\nTwo-Sample Two-Tailed T-Test CPU results: \n";
-    std::cout<<"Sample size[0]: \t"<<length[0]<<"\n";
-    std::cout<<"Sample mean[0]: \t"<<mean[0]<<"\n";
-    std::cout<<"Sample std dev[0]: \t"<<stddev[0]<<"\n";
-    std::cout<<"Sample size[1]: \t"<<length[1]<<"\n";
-    std::cout<<"Sample mean[1]: \t"<<mean[1]<<"\n";
-    std::cout<<"Sample std dev[1]: \t"<<stddev[1]<<"\n\n";
-    std::cout<<"Difference of means: \t\t"<<diffmeans<<"\n";
-    std::cout<<"Degrees of freedom: \t\t"<<df<<"\n";
-    std::cout<<"Standard error of difference: \t"<<stderror<<"\n";
-    std::cout<<"\nT-statistic for difference of means compared to null hypothesis: "<<t_statistic<<"\n";
-    std::cout<<"Alpha value: \t\t"<<alpha<<"\n";
-    std::cout<<"P-value: \t\t"<<p_value<<"\n";
-    std::cout<<"We "<<(p_value >= alpha/2 ? "fail to" : "")<<" reject the null hypothesis.\n";
-
-    // runtime:
-    std::cout<<"CPU runtime: "<<cpu_time.count()*1000.<<" ms."<<std::endl;
 }
 
 struct std_dev_func
@@ -688,7 +428,6 @@ void GPU_One_Sample_T_Interval(thrust::device_vector<unsigned ll> data, int data
     std::cout<<"Margin of error for this sample: \t\t"<<moe<<"\n";
     std::cout<<"95 percent confident that the true population mean lies between "<<mean-moe<<" and "<<mean+moe<<"\n";
 
-    printf("\nGPU runtime: %.4f ms\n",gpu_time);
 }
 
 void GPU_Two_Sample_T_Test(thrust::device_vector<unsigned ll> data, thrust::device_vector<unsigned ll> categories, int datalength)
@@ -720,7 +459,6 @@ void GPU_Two_Sample_T_Test(thrust::device_vector<unsigned ll> data, thrust::devi
     cudaEventDestroy(start);
     cudaEventDestroy(end);
 
-    printf("\nGPU sorting runtime: %.4f ms\n",gpu_time);
 
     cudaEventCreate(&start);
     cudaEventCreate(&end);
@@ -803,12 +541,10 @@ void GPU_Two_Sample_T_Test(thrust::device_vector<unsigned ll> data, thrust::devi
     std::cout<<"P-value: \t\t"<<p_value<<"\n";
     std::cout<<"We "<<(p_value >= alpha/2 ? "fail to" : "")<<" reject the null hypothesis.\n";
 
-    printf("\nGPU analysis runtime: %.4f ms\n",gpu_time);
 }
 
 int main(int argc, char *argv[])
 {
-	Test_Entire_CPU(argv[1]);
 	Test_Entire_GPU(argv[1]);
 	return 0;
 }
